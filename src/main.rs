@@ -27,7 +27,7 @@ const HISTORY_FILE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/data/history.ts
 const SAVED_FILE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/data/saved.tsv");
 const ACCENT: Tc = Tc::Cyan;
 /// Background brightness, in percent.
-const DIM: u16 = 55;
+const DIM: u16 = 40;
 const BACKGROUND: &[u8] = include_bytes!("../assets/a_blue_and_white_image_of_a_mountain.png");
 
 const HELP: &[(&str, &str)] = &[
