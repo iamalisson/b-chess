@@ -332,6 +332,9 @@ fn today() -> String {
 // ---------- game ----------
 
 fn parse_move(pos: &Chess, s: &str) -> Option<Move> {
+    // Castling is written with the letter O, but 0-0 and o-o are common too.
+    let castle = s.replace(['0', 'o'], "O");
+    let s = if castle.starts_with("O-O") { castle.as_str() } else { s };
     if let Ok(san) = SanPlus::from_ascii(s.as_bytes()) {
         if let Ok(m) = san.san.to_move(pos) {
             return Some(m);
@@ -1330,6 +1333,20 @@ mod tests {
         assert_eq!(spec(1500).weights, "maia-1500");
         assert_eq!(describe(800), "maia-1100 + 30% random");
         assert_eq!(describe(2400), "t1-256x10, 4 nodes");
+    }
+
+    #[test]
+    fn castling_accepts_zeros_and_lowercase() {
+        // 1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5: white can castle short.
+        let mut pos = Chess::default();
+        for m in ["e4", "e5", "Nf3", "Nc6", "Bc4", "Bc5"] {
+            let mv = parse_move(&pos, m).unwrap();
+            pos.play_unchecked(mv);
+        }
+        for s in ["O-O", "0-0", "o-o", "0-0+"] {
+            assert!(parse_move(&pos, s).is_some_and(|m| m.is_castle()), "{s}");
+        }
+        assert!(parse_move(&pos, "0-0-0").is_none(), "long castling is not legal here");
     }
 
     #[test]
