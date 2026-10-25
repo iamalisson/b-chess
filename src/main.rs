@@ -1,7 +1,6 @@
 mod engine;
 
 use engine::Engine;
-use image::{imageops::FilterType, DynamicImage, ImageFormat};
 use ratatui::{
     crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     layout::{Constraint, Flex, Layout, Margin, Rect},
@@ -26,9 +25,8 @@ const WEIGHTS_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/weights");
 const HISTORY_FILE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/data/history.tsv");
 const SAVED_FILE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/data/saved.tsv");
 const ACCENT: Tc = Tc::Cyan;
-/// Background brightness, in percent.
-const DIM: u16 = 40;
-const BACKGROUND: &[u8] = include_bytes!("../assets/a_blue_and_white_image_of_a_mountain.png");
+/// Background of the whole app.
+const PANEL: Tc = Tc::Rgb(36, 40, 54);
 
 const HELP: &[(&str, &str)] = &[
     ("#", "In a game"),
@@ -554,11 +552,6 @@ struct App {
     saved: Option<SavedGame>,
     game: Option<Game>,
     msg: Option<(String, Tc)>,
-    background: Option<DynamicImage>,
-    bg_cache: Option<(u16, u16, Vec<(Tc, Tc)>)>,
-    /// Terminal speaks the kitty graphics protocol: show the image at full resolution.
-    kitty: bool,
-    placed: Option<(u16, u16)>,
 }
 
 impl App {
@@ -598,12 +591,6 @@ impl App {
 
     fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
         loop {
-            if self.kitty {
-                // Resize (and its screen clear) first, then put the image under the new frame.
-                terminal.autoresize()?;
-                let size = terminal.size()?;
-                self.place_image(size.width, size.height)?;
-            }
             terminal.draw(|f| self.draw(f))?;
             // The bot moves between frames, so your move is on screen while it thinks.
             if self.game.as_ref().is_some_and(|g| g.thinking) {
@@ -900,7 +887,7 @@ impl App {
     // ---------- drawing ----------
 
     fn draw(&mut self, f: &mut Frame) {
-        self.draw_background(f);
+        solid(f, f.area());
         match self.screen {
             Screen::Menu => self.draw_menu(f),
             Screen::Setup => self.draw_setup(f),
@@ -911,109 +898,6 @@ impl App {
             Some(Modal::Help) => draw_help(f),
             Some(Modal::Path { import, input }) => draw_path(f, *import, input),
             None => {}
-        }
-        self.ink(f);
-    }
-
-    /// After the widgets are drawn: blank cells show the image again, and text without its
-    /// own colors is drawn in the terminal's text color straight on the image.
-    fn ink(&self, f: &mut Frame) {
-        if self.kitty {
-            return;
-        }
-        let Some((w, h, cells)) = &self.bg_cache else { return };
-        let area = f.area();
-        if (area.width, area.height) != (*w, *h) {
-            return;
-        }
-        let buf = f.buffer_mut();
-        for y in 0..*h {
-            for x in 0..*w {
-                let (top, bottom) = cells[(y * w + x) as usize];
-                let cell = &mut buf[(area.x + x, area.y + y)];
-                let untouched_bg = cell.bg == bottom || cell.bg == Tc::Reset;
-                if cell.symbol() == " " && untouched_bg {
-                    cell.set_char('▀').set_fg(top).set_bg(bottom);
-                } else if cell.symbol() != "▀" {
-                    if cell.fg == top {
-                        cell.fg = Tc::Reset;
-                    }
-                    if untouched_bg {
-                        cell.bg = blend(top, bottom);
-                    }
-                }
-            }
-        }
-    }
-
-    /// Sends the image to a kitty-protocol terminal, sized to the whole window and placed
-    /// under the text (z below -2^30 also keeps it under cells with their own background,
-    /// like the board squares). Re-sent only when the window size changes.
-    fn place_image(&mut self, cols: u16, rows: u16) -> io::Result<()> {
-        if self.placed == Some((cols, rows)) {
-            return Ok(());
-        }
-        let Some(img) = &self.background else { return Ok(()) };
-        let (pw, ph) = match ratatui::crossterm::terminal::window_size() {
-            Ok(s) if s.width > 0 && s.height > 0 => (s.width as u32, s.height as u32),
-            _ => (cols as u32 * 10, rows as u32 * 20),
-        };
-        let mut px = img.resize_to_fill(pw, ph, FilterType::Lanczos3).to_rgb8();
-        for c in px.iter_mut() {
-            *c = (*c as u16 * DIM / 100) as u8;
-        }
-        let mut png = Vec::new();
-        DynamicImage::ImageRgb8(px)
-            .write_to(&mut io::Cursor::new(&mut png), ImageFormat::Png)
-            .map_err(io::Error::other)?;
-        let data = base64(&png);
-        let chunks: Vec<&[u8]> = data.as_bytes().chunks(4096).collect();
-        let mut out = io::stdout().lock();
-        write!(out, "\x1b7\x1b[H")?; // save cursor, go to top-left
-        for (i, chunk) in chunks.iter().enumerate() {
-            let more = (i + 1 < chunks.len()) as u8;
-            if i == 0 {
-                write!(out, "\x1b_Ga=T,f=100,i=1,p=1,q=2,C=1,c={cols},r={rows},z=-1073741825,m={more};")?;
-            } else {
-                write!(out, "\x1b_Gm={more};")?;
-            }
-            out.write_all(chunk)?;
-            write!(out, "\x1b\\")?;
-        }
-        write!(out, "\x1b8")?; // restore cursor
-        out.flush()?;
-        self.placed = Some((cols, rows));
-        Ok(())
-    }
-
-    /// The background image as half blocks: each cell shows two pixels (fg on top, bg below).
-    fn draw_background(&mut self, f: &mut Frame) {
-        if self.kitty {
-            return;
-        }
-        let Some(img) = &self.background else { return };
-        let area = f.area();
-        let (w, h) = (area.width, area.height);
-        if self.bg_cache.as_ref().is_none_or(|c| (c.0, c.1) != (w, h)) {
-            let px = img.resize_to_fill(w as u32, h as u32 * 2, FilterType::Triangle).to_rgb8();
-            let dim = |c: u8| (c as u16 * DIM / 100) as u8;
-            let rgb = |x: u32, y: u32| {
-                let [r, g, b] = px.get_pixel(x, y).0;
-                Tc::Rgb(dim(r), dim(g), dim(b))
-            };
-            let cells = (0..h as u32)
-                .flat_map(|y| (0..w as u32).map(move |x| (x, y)))
-                .map(|(x, y)| (rgb(x, 2 * y), rgb(x, 2 * y + 1)))
-                .collect();
-            self.bg_cache = Some((w, h, cells));
-        }
-        let cells = &self.bg_cache.as_ref().unwrap().2;
-        let buf = f.buffer_mut();
-        for y in 0..h {
-            for x in 0..w {
-                let (top, bottom) = cells[(y * w + x) as usize];
-                buf[(area.x + x, area.y + y)].set_char('▀').set_fg(top).set_bg(bottom);
-            }
         }
     }
 
@@ -1290,43 +1174,10 @@ impl App {
 
 // ---------- widgets ----------
 
-/// Standard base64, for the kitty graphics protocol.
-fn base64(data: &[u8]) -> String {
-    const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut s = String::with_capacity(data.len().div_ceil(3) * 4);
-    for c in data.chunks(3) {
-        let byte = |i: usize| *c.get(i).unwrap_or(&0) as u32;
-        let n = byte(0) << 16 | byte(1) << 8 | byte(2);
-        for i in 0..4 {
-            s.push(if i <= c.len() { T[(n >> (18 - 6 * i) & 63) as usize] as char } else { '=' });
-        }
-    }
-    s
-}
-
-/// kitty, Ghostty and WezTerm draw images; tmux would swallow the escape codes.
-fn kitty_graphics() -> bool {
-    let var = |k: &str| env::var(k).unwrap_or_default();
-    env::var("TMUX").is_err()
-        && (var("TERM").contains("kitty")
-            || env::var("KITTY_WINDOW_ID").is_ok()
-            || matches!(var("TERM_PROGRAM").as_str(), "ghostty" | "WezTerm"))
-}
-
-/// Average of two colors: the image behind a text cell, which can only show one color.
-fn blend(a: Tc, b: Tc) -> Tc {
-    match (a, b) {
-        (Tc::Rgb(r1, g1, b1), Tc::Rgb(r2, g2, b2)) => {
-            let avg = |x: u8, y: u8| ((x as u16 + y as u16) / 2) as u8;
-            Tc::Rgb(avg(r1, r2), avg(g1, g2), avg(b1, b2))
-        }
-        _ => a,
-    }
-}
-
-/// Empties `area`; `App::ink` paints the background image back into the blank cells.
+/// Clears `area` and paints the app background on it.
 fn solid(f: &mut Frame, area: Rect) {
     f.render_widget(Clear, area);
+    f.render_widget(Block::new().style(Style::new().bg(PANEL)), area);
 }
 
 fn rounded(title: &str) -> Block<'_> {
@@ -1451,16 +1302,9 @@ fn main() -> io::Result<()> {
         saved: load_saved(),
         game: None,
         msg: None,
-        background: image::load_from_memory(BACKGROUND).ok(),
-        bg_cache: None,
-        kitty: kitty_graphics(),
-        placed: None,
     };
     let mut terminal = ratatui::init();
     let result = app.run(&mut terminal);
-    if app.kitty {
-        print!("\x1b_Ga=d,d=A,q=2\x1b\\"); // delete our image
-    }
     ratatui::restore();
     result
 }
@@ -1486,14 +1330,6 @@ mod tests {
         assert_eq!(spec(1500).weights, "maia-1500");
         assert_eq!(describe(800), "maia-1100 + 30% random");
         assert_eq!(describe(2400), "t1-256x10, 4 nodes");
-    }
-
-    #[test]
-    fn base64_matches_rfc4648() {
-        assert_eq!(base64(b"Man"), "TWFu");
-        assert_eq!(base64(b"Ma"), "TWE=");
-        assert_eq!(base64(b"M"), "TQ==");
-        assert_eq!(base64(b""), "");
     }
 
     #[test]

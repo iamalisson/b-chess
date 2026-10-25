@@ -97,7 +97,6 @@ Copy it to the other machine and choose **Import progress** there.
 | [Rust](https://www.rust-lang.org) | language |
 | [ratatui](https://ratatui.rs) + [crossterm](https://github.com/crossterm-rs/crossterm) | terminal UI |
 | [shakmaty](https://github.com/niklasf/shakmaty) | chess rules, SAN/UCI parsing, repetition detection |
-| [image](https://github.com/image-rs/image) | background picture, drawn with half-block characters |
 | [Lc0](https://lczero.org) | neural-network chess engine, spoken to over UCI |
 | [Maia Chess](https://github.com/CSSLab/maia-chess) | human-like networks, 1100–1900 |
 | [Leela T1-256x10](https://lczero.org/play/networks/bestnets/) | strong network for 2200–3000 |
