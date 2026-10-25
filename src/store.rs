@@ -17,7 +17,8 @@ pub const T1_URL: &str =
     "https://storage.lczero.org/files/networks-contrib/t1-256x10-distilled-swa-2432500.pb.gz";
 
 /// Where weights/ and data/ live: $B_CHESS_HOME, else this source checkout when running
-/// from it (dev builds), else ~/.local/share/b-chess (released binaries).
+/// from it, else ~/.local/share/b-chess. Packaged builds (Nix, releases) set
+/// B_CHESS_PACKAGED at compile time so a stray copy of their build path is never used.
 pub fn home() -> &'static Path {
     static HOME: OnceLock<PathBuf> = OnceLock::new();
     HOME.get_or_init(|| {
@@ -25,7 +26,7 @@ pub fn home() -> &'static Path {
             return h.into();
         }
         let src = Path::new(env!("CARGO_MANIFEST_DIR"));
-        if src.join("Cargo.toml").exists() {
+        if option_env!("B_CHESS_PACKAGED").is_none() && src.join("Cargo.toml").exists() {
             return src.into();
         }
         let data = env::var("XDG_DATA_HOME")

@@ -5,17 +5,25 @@
 
   outputs = { self, nixpkgs }:
     let
-      forAll = f: nixpkgs.lib.genAttrs [ "x86_64-linux" "aarch64-linux" ]
-        (system: f nixpkgs.legacyPackages.${system});
+      inherit (nixpkgs) lib;
+      cargo = (lib.importTOML ./Cargo.toml).package;
+      # Only x86_64-linux is built and tested so far.
+      forAll = f: lib.genAttrs [ "x86_64-linux" ] (system: f nixpkgs.legacyPackages.${system});
     in
     {
       packages = forAll (pkgs: rec {
         lc0 = import ./nix/lc0.nix { inherit pkgs; };
         b-chess = pkgs.rustPlatform.buildRustPackage {
-          pname = "b-chess";
-          version = "0.1.0";
-          src = self;
+          pname = cargo.name;
+          inherit (cargo) version;
+          # Just what the build needs: docs, screenshots and local data/ never reach the store.
+          src = lib.fileset.toSource {
+            root = ./.;
+            fileset = lib.fileset.unions [ ./Cargo.toml ./Cargo.lock ./src ];
+          };
           cargoLock.lockFile = ./Cargo.lock;
+          # Keep files in ~/.local/share/b-chess, never in the build directory.
+          env.B_CHESS_PACKAGED = "1";
           nativeBuildInputs = [ pkgs.makeWrapper ];
           # Ships with its own lc0, and curl for the first-run network download.
           postInstall = ''
@@ -30,7 +38,8 @@
 
       devShells = forAll (pkgs: {
         default = pkgs.mkShell {
-          packages = [ self.packages.${pkgs.stdenv.hostPlatform.system}.lc0 pkgs.cargo pkgs.rustc ];
+          inputsFrom = [ self.packages.${pkgs.stdenv.hostPlatform.system}.b-chess ];
+          packages = [ self.packages.${pkgs.stdenv.hostPlatform.system}.lc0 ];
         };
       });
     };

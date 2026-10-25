@@ -55,15 +55,30 @@ Only the Maia ratings (1100–1900) come from the networks themselves. The other
 
 ## Install
 
-**Nix / NixOS**: one command, Lc0 included:
+**Nix / NixOS** (x86_64 Linux): one command, Lc0 included. Needs flakes enabled
+(or add `--extra-experimental-features 'nix-command flakes'`):
 
 ```sh
-nix profile install github:iamalisson/b-chess   # install
-nix run github:iamalisson/b-chess               # or just try it
+nix profile add github:iamalisson/b-chess   # install
+nix run github:iamalisson/b-chess           # or just try it
 ```
 
-Or add `inputs.b-chess.url = "github:iamalisson/b-chess";` to your flake and put
-`b-chess.packages.${system}.default` in `environment.systemPackages` / `home.packages`.
+The first install compiles Lc0 with oneDNN (a few minutes; it isn't in the binary cache).
+
+In a flake-based NixOS or home-manager config:
+
+```nix
+# flake.nix
+inputs.b-chess = {
+  url = "github:iamalisson/b-chess";
+  inputs.nixpkgs.follows = "nixpkgs";
+};
+
+# configuration.nix (or home.nix: home.packages)
+environment.systemPackages = [
+  inputs.b-chess.packages.${pkgs.stdenv.hostPlatform.system}.default
+];
+```
 
 **Other systems:**
 
@@ -71,7 +86,7 @@ Or add `inputs.b-chess.url = "github:iamalisson/b-chess";` to your flake and put
 
 | System | How |
 |---|---|
-| NixOS / Nix | `nix develop` or `nix-shell` in this repo |
+| NixOS / Nix | `nix develop` in this repo (Rust + Lc0) |
 | Arch | `yay -S lc0` |
 | macOS | `brew install lc0` |
 | Others | [build or download a release](https://github.com/LeelaChessZero/lc0/releases) |

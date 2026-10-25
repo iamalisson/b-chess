@@ -10,5 +10,4 @@ in
 pkgs.lc0.overrideAttrs (old: {
   buildInputs = old.buildInputs ++ [ pkgs.oneDNN ];
   mesonFlags = old.mesonFlags ++ [ "-Ddnnl=true" "-Ddnnl_dir=${dnnl}" ];
-  doCheck = false;
 })
