@@ -11,8 +11,8 @@ use ratatui::{
     DefaultTerminal, Frame,
 };
 use shakmaty::{
-    san::SanPlus, uci::UciMove, zobrist::Zobrist64, CastlingMode, Chess, Color, EnPassantMode,
-    File, Move, Position, Rank, Role, Square,
+    fen::Fen, san::SanPlus, uci::UciMove, zobrist::Zobrist64, CastlingMode, Chess, Color, EnPassantMode,
+    File, Move, Position, Rank, Square,
 };
 use std::{
     env, fs,
@@ -1162,12 +1162,12 @@ impl App {
         f.render_widget(Paragraph::new(lines).scroll((scroll, 0)).block(rounded(" Moves ")), moves_area);
 
         if g.peek {
-            let board = board_lines(&g.pos, g.me, g.last);
-            let h = board.len() as u16;
             let block = rounded(" Board (peeking) ").border_style(Style::new().fg(Tc::Yellow));
             let inner = block.inner(main);
             f.render_widget(block, main);
-            f.render_widget(Paragraph::new(board), center(inner, 27, h));
+            let board = board_lines(&g.pos, g.me, g.last, inner.height >= 20);
+            let h = board.len() as u16;
+            f.render_widget(Paragraph::new(board), center(inner, 35, h));
         } else {
             let mut text = vec![];
             let n = g.san.len();
@@ -1391,7 +1391,9 @@ fn draw_path(f: &mut Frame, import: bool, input: &str) {
     f.set_cursor_position((inner.x + 2 + input.chars().count() as u16, inner.y));
 }
 
-fn board_lines(pos: &Chess, me: Color, last: Option<Move>) -> Vec<Line<'static>> {
+/// gnuchess-style board: letters (white uppercase), dots for empty squares, last move in
+/// yellow. `spaced` puts a blank line between ranks for a bigger board.
+fn board_lines(pos: &Chess, me: Color, last: Option<Move>, spaced: bool) -> Vec<Line<'static>> {
     let mut ranks = Rank::ALL.to_vec();
     let mut files = File::ALL.to_vec();
     if me == Color::White {
@@ -1400,35 +1402,33 @@ fn board_lines(pos: &Chess, me: Color, last: Option<Move>) -> Vec<Line<'static>>
         files.reverse();
     }
     let marked = |sq: Square| last.is_some_and(|m| m.to() == sq || m.from() == Some(sq));
-    let mut lines = Vec::new();
-    for &r in &ranks {
-        let mut spans = vec![Span::raw(format!("{} ", r.char())).dim()];
+
+    // "black  KQkq  c3", like gnuchess: side to move, castling rights, en passant square.
+    let fen = Fen::from_position(pos, EnPassantMode::Legal).to_string();
+    let fields: Vec<&str> = fen.split(' ').collect();
+    let turn = if pos.turn() == Color::White { "white" } else { "black" };
+    let mut lines = vec![
+        Line::from(format!("{turn}  {}  {}", fields[2], fields[3])).fg(ACCENT),
+        Line::from(""),
+    ];
+    for (i, &r) in ranks.iter().enumerate() {
+        if spaced && i > 0 {
+            lines.push(Line::from(""));
+        }
+        let mut spans = vec![Span::raw(format!("{}  ", r.char())).dim()];
         for &f in &files {
             let sq = Square::from_coords(f, r);
-            let light = (u32::from(f) + u32::from(r)) % 2 == 1;
-            let bg = match (light, marked(sq)) {
-                (true, false) => Tc::Rgb(240, 217, 181),
-                (false, false) => Tc::Rgb(181, 136, 99),
-                (true, true) => Tc::Rgb(247, 236, 116),
-                (false, true) => Tc::Rgb(218, 195, 50),
+            let span = match pos.board().piece_at(sq) {
+                Some(p) => Span::raw(format!("  {} ", p.char())).bold(),
+                None => Span::raw("  . ").dim(),
             };
-            let glyph = pos.board().piece_at(sq).map_or(' ', |p| {
-                let white = p.color == Color::White;
-                match p.role {
-                    Role::King => if white { '♔' } else { '♚' },
-                    Role::Queen => if white { '♕' } else { '♛' },
-                    Role::Rook => if white { '♖' } else { '♜' },
-                    Role::Bishop => if white { '♗' } else { '♝' },
-                    Role::Knight => if white { '♘' } else { '♞' },
-                    Role::Pawn => if white { '♙' } else { '♟' },
-                }
-            });
-            spans.push(Span::styled(format!(" {glyph} "), Style::new().bg(bg).fg(Tc::Black)));
+            spans.push(if marked(sq) { span.fg(Tc::Yellow).bold() } else { span });
         }
         lines.push(Line::from(spans));
     }
-    let labels: String = files.iter().map(|f| format!(" {} ", f.char())).collect();
-    lines.push(Line::from(format!("  {labels}")).dim());
+    lines.push(Line::from(""));
+    let labels: String = files.iter().map(|f| format!("  {} ", f.char())).collect();
+    lines.push(Line::from(format!("   {labels}")).dim());
     lines
 }
 
