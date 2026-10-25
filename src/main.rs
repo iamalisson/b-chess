@@ -18,15 +18,18 @@ use std::{
     io::{self, Write},
     path::{Path, PathBuf},
     process,
+    sync::OnceLock,
     time::{SystemTime, UNIX_EPOCH},
 };
 
-const WEIGHTS_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/weights");
-const HISTORY_FILE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/data/history.tsv");
-const SAVED_FILE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/data/saved.tsv");
+const MAIA_URL: &str = "https://github.com/CSSLab/maia-chess/releases/download/v1.0";
+const T1_URL: &str =
+    "https://storage.lczero.org/files/networks-contrib/t1-256x10-distilled-swa-2432500.pb.gz";
 const ACCENT: Tc = Tc::Cyan;
-/// Background of the whole app.
+/// Background of panels and dialogs.
 const PANEL: Tc = Tc::Rgb(36, 40, 54);
+/// Background around them, a bit lighter so the panels stand out.
+const OUTER: Tc = Tc::Rgb(54, 60, 78);
 
 // Help is two columns side by side when the terminal is wide enough, stacked otherwise.
 const HELP_LEFT: &[(&str, &str)] = &[
@@ -158,6 +161,63 @@ impl Rng {
     }
 }
 
+// ---------- files ----------
+
+/// Where weights/ and data/ live: $B_CHESS_HOME, else this source checkout when running
+/// from it (dev builds), else ~/.local/share/b-chess (released binaries).
+fn home() -> &'static Path {
+    static HOME: OnceLock<PathBuf> = OnceLock::new();
+    HOME.get_or_init(|| {
+        if let Ok(h) = env::var("B_CHESS_HOME") {
+            return h.into();
+        }
+        let src = Path::new(env!("CARGO_MANIFEST_DIR"));
+        if src.join("Cargo.toml").exists() {
+            return src.into();
+        }
+        let data = env::var("XDG_DATA_HOME").map(PathBuf::from).unwrap_or_else(|_| {
+            Path::new(&env::var("HOME").unwrap_or_default()).join(".local/share")
+        });
+        data.join("b-chess")
+    })
+}
+
+fn history_file() -> PathBuf {
+    home().join("data/history.tsv")
+}
+
+fn saved_file() -> PathBuf {
+    home().join("data/saved.tsv")
+}
+
+/// Downloads the networks missing from `dir` with curl (Maia 1100-1900 + Leela T1, ~50 MB).
+fn fetch_networks(dir: &Path) -> io::Result<()> {
+    let mut nets: Vec<(String, String)> = (11..=19)
+        .map(|n| (format!("maia-{n}00.pb.gz"), format!("{MAIA_URL}/maia-{n}00.pb.gz")))
+        .collect();
+    nets.push(("t1-256x10.pb.gz".into(), T1_URL.into()));
+    fs::create_dir_all(dir)?;
+    for (name, url) in nets {
+        let path = dir.join(&name);
+        if path.exists() {
+            continue;
+        }
+        println!("Downloading {name} into {}", dir.display());
+        let part = dir.join(format!("{name}.part"));
+        let ok = process::Command::new("curl")
+            .args(["-fL", "--progress-bar", "-o"])
+            .arg(&part)
+            .arg(&url)
+            .status()?
+            .success();
+        if !ok {
+            return Err(io::Error::other(format!("download failed: {url}")));
+        }
+        fs::rename(part, path)?;
+    }
+    Ok(())
+}
+
 // ---------- history & saved game ----------
 
 fn color_code(c: Color) -> &'static str {
@@ -238,7 +298,7 @@ impl SavedGame {
 }
 
 fn load_history() -> Vec<Record> {
-    fs::read_to_string(HISTORY_FILE)
+    fs::read_to_string(history_file())
         .unwrap_or_default()
         .lines()
         .filter_map(Record::parse)
@@ -246,25 +306,25 @@ fn load_history() -> Vec<Record> {
 }
 
 fn append_history(r: &Record) -> io::Result<()> {
-    let path = Path::new(HISTORY_FILE);
+    let path = &history_file();
     fs::create_dir_all(path.parent().unwrap())?;
     let mut f = fs::OpenOptions::new().create(true).append(true).open(path)?;
     writeln!(f, "{}", r.to_line())
 }
 
 fn write_history(all: &[Record]) -> io::Result<()> {
-    let path = Path::new(HISTORY_FILE);
+    let path = &history_file();
     fs::create_dir_all(path.parent().unwrap())?;
     let text: String = all.iter().map(|r| r.to_line() + "\n").collect();
     fs::write(path, text)
 }
 
 fn load_saved() -> Option<SavedGame> {
-    SavedGame::parse(fs::read_to_string(SAVED_FILE).ok()?.trim_end_matches('\n'))
+    SavedGame::parse(fs::read_to_string(saved_file()).ok()?.trim_end_matches('\n'))
 }
 
 fn write_saved(saved: Option<&SavedGame>) -> io::Result<()> {
-    let path = Path::new(SAVED_FILE);
+    let path = &saved_file();
     match saved {
         Some(s) => {
             fs::create_dir_all(path.parent().unwrap())?;
@@ -900,7 +960,7 @@ impl App {
     // ---------- drawing ----------
 
     fn draw(&mut self, f: &mut Frame) {
-        solid(f, f.area());
+        f.render_widget(Block::new().style(Style::new().bg(OUTER)), f.area());
         // A modal gets the screen to itself: the page behind is not drawn.
         match &self.modal {
             Some(Modal::Help) => draw_help(f),
@@ -1319,10 +1379,13 @@ fn board_lines(pos: &Chess, me: Color, last: Option<Move>, spaced: bool) -> Vec<
 }
 
 fn main() -> io::Result<()> {
-    let weights = PathBuf::from(env::var("MAIA_DIR").unwrap_or_else(|_| WEIGHTS_DIR.into()));
+    let weights = env::var("MAIA_DIR").map_or_else(|_| home().join("weights"), PathBuf::from);
+    if let Err(e) = fetch_networks(&weights) {
+        eprintln!("{e}");
+    }
     let levels = levels(&weights);
     if levels.is_empty() {
-        eprintln!("No weights in {} (run scripts/fetch-weights.sh)", weights.display());
+        eprintln!("No networks in {} (needs curl and internet on first run)", weights.display());
         process::exit(1);
     }
     let mut app = App {

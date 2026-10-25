@@ -1,3 +1,5 @@
 /target
 /weights
 /data
+*.part
+/result

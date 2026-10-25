@@ -55,29 +55,34 @@ Only the Maia ratings (1100–1900) come from the networks themselves. The other
 
 ## Install
 
-You need **Rust**, **[Lc0](https://github.com/LeelaChessZero/lc0)** and the network files.
-
-```sh
-git clone https://github.com/iamalisson/b-chess && cd b-chess
-./scripts/fetch-weights.sh      # Maia 1100-1900 + Leela T1 (~50 MB)
-```
-
-Get `lc0` on your `PATH`:
+**1. Get [Lc0](https://github.com/LeelaChessZero/lc0)** on your `PATH`:
 
 | System | How |
 |---|---|
-| NixOS / Nix | `nix-shell` (uses the included `shell.nix`) |
+| NixOS / Nix | `nix-shell` in this repo (uses the included `shell.nix`) |
 | Arch | `yay -S lc0` |
 | macOS | `brew install lc0` |
 | Others | [build or download a release](https://github.com/LeelaChessZero/lc0/releases) |
 
-Then run:
+**2a. Linux binary**: grab `b-chess-*-x86_64-linux.tar.gz` from
+[Releases](https://github.com/iamalisson/b-chess/releases) (static, runs on any x86_64 distro):
 
 ```sh
+tar xzf b-chess-*-x86_64-linux.tar.gz
+./b-chess
+```
+
+**2b. From source** (needs [Rust](https://rustup.rs)):
+
+```sh
+git clone https://github.com/iamalisson/b-chess && cd b-chess
 cargo run --release
 ```
 
-`LC0=/path/to/lc0` and `MAIA_DIR=/path/to/weights` override the defaults.
+On first run b-chess downloads the networks (Maia 1100–1900 + Leela T1, ~50 MB) with `curl`.
+Networks and progress live in `~/.local/share/b-chess` (or in the repo folder when run from source).
+
+`LC0=/path/to/lc0`, `MAIA_DIR=/path/to/weights` and `B_CHESS_HOME=/path` override the defaults.
 
 > **Speed:** levels up to 2100 answer instantly. From 2200 up, the big network runs on the CPU,
 > and a build with only the Eigen backend can take several seconds per move at 2800+.
@@ -108,7 +113,7 @@ Moves use standard algebraic notation (SAN):
 
 ## Progress & changing PCs
 
-Progress lives in `data/` (gitignored):
+Progress lives in `data/` inside `~/.local/share/b-chess` (or the repo, gitignored):
 
 - `data/history.tsv`: one line per finished game
 - `data/saved.tsv`: the game in progress
