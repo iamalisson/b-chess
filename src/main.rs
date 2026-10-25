@@ -18,7 +18,10 @@ use std::{
     io::{self, Write},
     path::{Path, PathBuf},
     process,
-    sync::OnceLock,
+    sync::{
+        atomic::{AtomicU32, Ordering},
+        OnceLock,
+    },
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -26,8 +29,34 @@ const MAIA_URL: &str = "https://github.com/CSSLab/maia-chess/releases/download/v
 const T1_URL: &str =
     "https://storage.lczero.org/files/networks-contrib/t1-256x10-distilled-swa-2432500.pb.gz";
 const ACCENT: Tc = Tc::Cyan;
-/// Background of the whole app.
-const PANEL: Tc = Tc::Rgb(36, 40, 54);
+/// Background presets, cycled from the menu. `NO_BG` leaves the terminal's own background.
+const NO_BG: u32 = u32::MAX;
+const BACKGROUNDS: [(&str, u32); 3] = [("dark", 0x242836), ("black", 0x000000), ("none", NO_BG)];
+
+/// Current background as 0xRRGGBB or `NO_BG`; global because every panel paints it.
+static BG: AtomicU32 = AtomicU32::new(0x242836);
+
+fn bg() -> Tc {
+    match BG.load(Ordering::Relaxed) {
+        NO_BG => Tc::Reset,
+        c => Tc::Rgb((c >> 16) as u8, (c >> 8) as u8, c as u8),
+    }
+}
+
+/// A preset name or a custom "#rrggbb".
+fn parse_bg(s: &str) -> Option<u32> {
+    match BACKGROUNDS.iter().find(|(name, _)| *name == s) {
+        Some(&(_, c)) => Some(c),
+        None => u32::from_str_radix(s.strip_prefix('#')?, 16).ok().filter(|_| s.len() == 7),
+    }
+}
+
+fn bg_name(c: u32) -> String {
+    BACKGROUNDS
+        .iter()
+        .find(|&&(_, v)| v == c)
+        .map_or_else(|| format!("#{c:06x}"), |(name, _)| name.to_string())
+}
 
 // Help is two columns side by side when the terminal is wide enough, stacked otherwise.
 const HELP_LEFT: &[(&str, &str)] = &[
@@ -54,6 +83,7 @@ const HELP_RIGHT: &[(&str, &str)] = &[
     ("↑↓  ←→  Enter", "choose"),
     ("r  n  h", "resume, new game, history"),
     ("e  i", "export / import progress"),
+    ("b", "background: dark, black, none"),
     ("?  q", "help, quit"),
     ("", ""),
     ("#", "Modes"),
@@ -182,6 +212,26 @@ fn home() -> &'static Path {
 
 fn history_file() -> PathBuf {
     home().join("data/history.tsv")
+}
+
+/// data/settings.tsv: one "key<TAB>value" per line; only "background" so far.
+fn settings_file() -> PathBuf {
+    home().join("data/settings.tsv")
+}
+
+fn load_settings() {
+    let text = fs::read_to_string(settings_file()).unwrap_or_default();
+    for line in text.lines() {
+        if let Some(c) = line.strip_prefix("background\t").and_then(parse_bg) {
+            BG.store(c, Ordering::Relaxed);
+        }
+    }
+}
+
+fn save_settings() -> io::Result<()> {
+    let path = settings_file();
+    fs::create_dir_all(path.parent().unwrap())?;
+    fs::write(path, format!("background\t{}\n", bg_name(BG.load(Ordering::Relaxed))))
 }
 
 fn saved_file() -> PathBuf {
@@ -597,6 +647,7 @@ enum Item {
     History,
     Export,
     Import,
+    Background,
     Help,
     Quit,
 }
@@ -639,7 +690,8 @@ impl App {
 
     fn items(&self) -> Vec<Item> {
         let mut v = if self.saved.is_some() { vec![Item::Resume] } else { vec![] };
-        v.extend([Item::New, Item::History, Item::Export, Item::Import, Item::Help, Item::Quit]);
+        v.extend([Item::New, Item::History, Item::Export, Item::Import, Item::Background, Item::Help]);
+        v.push(Item::Quit);
         v
     }
 
@@ -655,6 +707,7 @@ impl App {
             Item::History => "History".into(),
             Item::Export => "Export progress".into(),
             Item::Import => "Import progress".into(),
+            Item::Background => format!("Background: {}", bg_name(BG.load(Ordering::Relaxed))),
             Item::Help => "Help".into(),
             Item::Quit => "Quit".into(),
         }
@@ -726,6 +779,7 @@ impl App {
             KeyCode::Char('h') => Item::History,
             KeyCode::Char('e') => Item::Export,
             KeyCode::Char('i') => Item::Import,
+            KeyCode::Char('b') => Item::Background,
             KeyCode::Char('?') => Item::Help,
             KeyCode::Char('q') | KeyCode::Esc => Item::Quit,
             _ => return Ok(false),
@@ -745,6 +799,13 @@ impl App {
             Item::Export | Item::Import => {
                 let input = "~/b-chess-progress.txt".to_string();
                 self.modal = Some(Modal::Path { import: matches!(item, Item::Import), input });
+            }
+            Item::Background => {
+                // Next preset; a custom color moves on to the first preset.
+                let cur = BG.load(Ordering::Relaxed);
+                let i = BACKGROUNDS.iter().position(|&(_, c)| c == cur).map_or(0, |i| i + 1);
+                BG.store(BACKGROUNDS[i % BACKGROUNDS.len()].1, Ordering::Relaxed);
+                self.msg = save_settings().err().map(|e| (format!("Could not save: {e}"), Tc::Red));
             }
             Item::Help => self.modal = Some(Modal::Help),
             Item::Quit => return Ok(true),
@@ -1248,7 +1309,7 @@ impl App {
 /// Clears `area` and paints the app background on it.
 fn solid(f: &mut Frame, area: Rect) {
     f.render_widget(Clear, area);
-    f.render_widget(Block::new().style(Style::new().bg(PANEL)), area);
+    f.render_widget(Block::new().style(Style::new().bg(bg())), area);
 }
 
 fn rounded(title: &str) -> Block<'_> {
@@ -1377,6 +1438,7 @@ fn board_lines(pos: &Chess, me: Color, last: Option<Move>, spaced: bool) -> Vec<
 }
 
 fn main() -> io::Result<()> {
+    load_settings();
     let weights = env::var("MAIA_DIR").map_or_else(|_| home().join("weights"), PathBuf::from);
     if let Err(e) = fetch_networks(&weights) {
         eprintln!("{e}");
@@ -1440,6 +1502,17 @@ mod tests {
             assert!(parse_move(&pos, s).is_some_and(|m| m.is_castle()), "{s}");
         }
         assert!(parse_move(&pos, "0-0-0").is_none(), "long castling is not legal here");
+    }
+
+    #[test]
+    fn background_settings_parse() {
+        assert_eq!(parse_bg("dark"), Some(0x242836));
+        assert_eq!(parse_bg("none"), Some(NO_BG));
+        assert_eq!(parse_bg("#1e1e2e"), Some(0x1e1e2e));
+        assert_eq!(parse_bg("#12345"), None);
+        assert_eq!(parse_bg("purple"), None);
+        assert_eq!(bg_name(0x1e1e2e), "#1e1e2e");
+        assert_eq!(bg_name(NO_BG), "none");
     }
 
     #[test]

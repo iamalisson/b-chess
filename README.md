@@ -109,7 +109,10 @@ Moves use standard algebraic notation (SAN):
 | | `help` / `?` / F1: all commands |
 | | `save`: back to the menu (game kept) · `quit`: save and exit |
 | | `resign` · Esc Esc: abandon |
-| Menu | ↑↓ Enter · `r` resume · `n` new · `h` history · `e` export · `i` import · `q` quit |
+| Menu | ↑↓ Enter · `r` resume · `n` new · `h` history · `e` export · `i` import · `b` background · `q` quit |
+
+**Background:** `b` in the menu cycles `dark` → `black` → `none` (`none` keeps your terminal's own
+background). For any other color, put `background<TAB>#rrggbb` in `data/settings.tsv`.
 
 ## Progress & changing PCs
 
