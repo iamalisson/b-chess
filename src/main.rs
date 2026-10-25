@@ -26,7 +26,6 @@ const WEIGHTS_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/weights");
 const HISTORY_FILE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/data/history.tsv");
 const SAVED_FILE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/data/saved.tsv");
 const ACCENT: Tc = Tc::Cyan;
-const PANEL: Tc = Tc::Rgb(36, 40, 54);
 const BACKGROUND: &[u8] = include_bytes!("../assets/a_blue_and_white_image_of_a_mountain.png");
 
 const HELP: &[(&str, &str)] = &[
@@ -906,7 +905,7 @@ impl App {
     }
 
     /// After the widgets are drawn: blank cells show the image again, and text without its
-    /// own colors gets the terminal's text color on a dark backing so it stays readable.
+    /// own colors is drawn in the terminal's text color straight on the image.
     fn ink(&self, f: &mut Frame) {
         let Some((w, h, cells)) = &self.bg_cache else { return };
         let area = f.area();
@@ -926,7 +925,7 @@ impl App {
                         cell.fg = Tc::Reset;
                     }
                     if untouched_bg {
-                        cell.bg = PANEL;
+                        cell.bg = blend(top, bottom);
                     }
                 }
             }
@@ -940,9 +939,11 @@ impl App {
         let (w, h) = (area.width, area.height);
         if self.bg_cache.as_ref().is_none_or(|c| (c.0, c.1) != (w, h)) {
             let px = img.resize_to_fill(w as u32, h as u32 * 2, FilterType::Triangle).to_rgb8();
+            // Dimmed a little so text on top stays readable.
+            let dim = |c: u8| (c as u16 * 3 / 4) as u8;
             let rgb = |x: u32, y: u32| {
                 let [r, g, b] = px.get_pixel(x, y).0;
-                Tc::Rgb(r, g, b)
+                Tc::Rgb(dim(r), dim(g), dim(b))
             };
             let cells = (0..h as u32)
                 .flat_map(|y| (0..w as u32).map(move |x| (x, y)))
@@ -1232,6 +1233,17 @@ impl App {
 }
 
 // ---------- widgets ----------
+
+/// Average of two colors: the image behind a text cell, which can only show one color.
+fn blend(a: Tc, b: Tc) -> Tc {
+    match (a, b) {
+        (Tc::Rgb(r1, g1, b1), Tc::Rgb(r2, g2, b2)) => {
+            let avg = |x: u8, y: u8| ((x as u16 + y as u16) / 2) as u8;
+            Tc::Rgb(avg(r1, r2), avg(g1, g2), avg(b1, b2))
+        }
+        _ => a,
+    }
+}
 
 /// Empties `area`; `App::ink` paints the background image back into the blank cells.
 fn solid(f: &mut Frame, area: Rect) {
