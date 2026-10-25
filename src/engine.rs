@@ -21,7 +21,11 @@ impl Engine {
             .spawn()?;
         let stdin = child.stdin.take().unwrap();
         let stdout = BufReader::new(child.stdout.take().unwrap());
-        let mut engine = Engine { child, stdin, stdout };
+        let mut engine = Engine {
+            child,
+            stdin,
+            stdout,
+        };
         engine.send("uci")?;
         engine.wait_for("uciok")?;
         engine.send("isready")?;
