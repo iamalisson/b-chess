@@ -901,16 +901,16 @@ impl App {
 
     fn draw(&mut self, f: &mut Frame) {
         solid(f, f.area());
-        match self.screen {
-            Screen::Menu => self.draw_menu(f),
-            Screen::Setup => self.draw_setup(f),
-            Screen::Game => self.draw_game(f),
-            Screen::History => self.draw_history(f),
-        }
+        // A modal gets the screen to itself: the page behind is not drawn.
         match &self.modal {
             Some(Modal::Help) => draw_help(f),
             Some(Modal::Path { import, input }) => draw_path(f, *import, input),
-            None => {}
+            None => match self.screen {
+                Screen::Menu => self.draw_menu(f),
+                Screen::Setup => self.draw_setup(f),
+                Screen::Game => self.draw_game(f),
+                Screen::History => self.draw_history(f),
+            },
         }
     }
 
