@@ -1,17 +1,5 @@
-# nix-shell: provides lc0 built with oneDNN (the nixpkgs build only has the slower
-# Eigen backend, which matters for levels 2200+). Rust comes from rustup or your system.
+# nix-shell: lc0 for running from source. Rust comes from rustup or your system.
 { pkgs ? import <nixpkgs> { } }:
-let
-  dnnl = pkgs.symlinkJoin {
-    name = "dnnl";
-    paths = [ pkgs.oneDNN.dev pkgs.oneDNN.out ];
-  };
-  lc0 = pkgs.lc0.overrideAttrs (old: {
-    buildInputs = old.buildInputs ++ [ pkgs.oneDNN ];
-    mesonFlags = old.mesonFlags ++ [ "-Ddnnl=true" "-Ddnnl_dir=${dnnl}" ];
-    doCheck = false;
-  });
-in
 pkgs.mkShell {
-  packages = [ lc0 ];
+  packages = [ (import ./nix/lc0.nix { inherit pkgs; }) ];
 }

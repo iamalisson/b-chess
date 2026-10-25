@@ -55,11 +55,23 @@ Only the Maia ratings (1100–1900) come from the networks themselves. The other
 
 ## Install
 
+**Nix / NixOS**: one command, Lc0 included:
+
+```sh
+nix profile install github:iamalisson/b-chess   # install
+nix run github:iamalisson/b-chess               # or just try it
+```
+
+Or add `inputs.b-chess.url = "github:iamalisson/b-chess";` to your flake and put
+`b-chess.packages.${system}.default` in `environment.systemPackages` / `home.packages`.
+
+**Other systems:**
+
 **1. Get [Lc0](https://github.com/LeelaChessZero/lc0)** on your `PATH`:
 
 | System | How |
 |---|---|
-| NixOS / Nix | `nix-shell` in this repo (uses the included `shell.nix`) |
+| NixOS / Nix | `nix develop` or `nix-shell` in this repo |
 | Arch | `yay -S lc0` |
 | macOS | `brew install lc0` |
 | Others | [build or download a release](https://github.com/LeelaChessZero/lc0/releases) |
