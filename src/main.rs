@@ -26,10 +26,8 @@ const MAIA_URL: &str = "https://github.com/CSSLab/maia-chess/releases/download/v
 const T1_URL: &str =
     "https://storage.lczero.org/files/networks-contrib/t1-256x10-distilled-swa-2432500.pb.gz";
 const ACCENT: Tc = Tc::Cyan;
-/// Background of panels and dialogs.
+/// Background of the whole app.
 const PANEL: Tc = Tc::Rgb(36, 40, 54);
-/// Background around them, a bit lighter so the panels stand out.
-const OUTER: Tc = Tc::Rgb(54, 60, 78);
 
 // Help is two columns side by side when the terminal is wide enough, stacked otherwise.
 const HELP_LEFT: &[(&str, &str)] = &[
@@ -960,7 +958,7 @@ impl App {
     // ---------- drawing ----------
 
     fn draw(&mut self, f: &mut Frame) {
-        f.render_widget(Block::new().style(Style::new().bg(OUTER)), f.area());
+        solid(f, f.area());
         // A modal gets the screen to itself: the page behind is not drawn.
         match &self.modal {
             Some(Modal::Help) => draw_help(f),
