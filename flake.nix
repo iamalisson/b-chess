@@ -16,10 +16,11 @@
         b-chess = pkgs.rustPlatform.buildRustPackage {
           pname = cargo.name;
           inherit (cargo) version;
-          # Just what the build needs: docs, screenshots and local data/ never reach the store.
+          # Just what the build needs (code + the embedded course): docs, screenshots and
+          # local data/ never reach the store.
           src = lib.fileset.toSource {
             root = ./.;
-            fileset = lib.fileset.unions [ ./Cargo.toml ./Cargo.lock ./src ];
+            fileset = lib.fileset.unions [ ./Cargo.toml ./Cargo.lock ./src ./assets/curriculum.toml ];
           };
           cargoLock.lockFile = ./Cargo.lock;
           # Keep files in ~/.local/share/b-chess, never in the build directory.

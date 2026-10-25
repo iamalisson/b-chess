@@ -4,6 +4,7 @@ mod game;
 mod levels;
 mod store;
 mod theme;
+mod training;
 mod ui;
 
 use app::App;

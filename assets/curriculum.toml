@@ -1,0 +1,1255 @@
+# Blindfold chess: from zero to a cup of coffee.
+# A 10-week course, 15-30 minutes a day, translated from "Xadrez às Cegas" (v2).
+#
+# Facts the app can compute (square colors, diagonals, attacked squares, knight routes,
+# mates) are computed. Position-dependent answers carry a `verify` rule that the test
+# suite checks against the real board:
+#   holds:X                  the answer square holds piece X (uppercase white, lowercase black)
+#   holds_choice:SQ          the chosen piece name is the piece standing on SQ
+#   pieces:X                 the answer (squares or count) matches every square holding piece X
+#   check:w|b                the answer says whether that side's king is in check
+#   checkers                 the answer (squares or count) matches the pieces giving check
+#   flight                   the answer lists the checked king's flight squares
+#   attackers:SQ:w|b         the answer (squares or count) matches that side's pieces attacking SQ
+#   attacked_by:SQ           the answer lists the enemy pieces the piece on SQ attacks
+#   attacks:FROM:TO          the answer says whether the piece on FROM attacks TO
+#   between:A:B              the answer lists the empty squares between A and B
+#   between:A:B:occupied     the answer lists the occupied squares between A and B
+
+# ---------------------------------------------------------------- phases
+
+[[phases]]
+number = 0
+title = "Diagnostic"
+goal = "Measure where you start. Answer without looking and without hurry; you will retake this test at graduation."
+notes = """
+Blindfold players don't keep a photo of the board. They keep a map of squares (each one's color, diagonals and neighbours known by heart) and a living list of relations (who attacks what, where the kings are, what is loose).
+
+The course trains three layers, in order: the map, movement, and position memory. Skipping layers is the most common reason people give up.
+
+Rules: train a little every day; say moves out loud; don't check in the middle of an exercise; only advance after passing the checkpoint; when you make a mistake, rebuild from the last point you were sure of; start each day with a short warm-up from earlier phases.
+"""
+routine = [["diagnostic", 5]]
+
+[[phases.exercises]]
+id = "diagnostic"
+title = "Diagnostic test"
+type = "quiz"
+checkpoint = true
+pass = { min_correct = 0 }
+questions = [
+  { kind = "color", square = "f6" },
+  { kind = "diagonal_squares", from = "c1", to = "h6" },
+  { kind = "attacks", piece = "N", square = "e4" },
+  { kind = "ask", moves = "1.e4 e5 2.Nf3 Nc6 3.Bc4", prompt = "After 1.e4 e5 2.Nf3 Nc6 3.Bc4, which black piece does the white bishop aim at? Give its square.", answer = { square = "f7" }, verify = "holds:p", note = "The f7 pawn, on the diagonal c4-d5-e6-f7." },
+  { kind = "mate1", position = "White: Kg6, Ra1. Black: Kg8.", note = "Ra8#." },
+]
+
+[[phases]]
+number = 1
+title = "The map"
+goal = "The empty board becomes automatic knowledge. No pieces yet."
+notes = """
+Color trick: turn the file into a number (a=1 ... h=8) and add the rank. Even sum = dark, odd sum = light. Use it as a crutch and drop it once the answer comes by itself.
+
+Anchors: a1 is dark, h1 is light. The queen starts on her own color. d4 and e5 are dark, e4 and d5 light. The long diagonal a1-h8 is all dark; h1-a8 all light.
+
+Diagonals to know like street names: a1-h8, h1-a8, a2-g8 (the Italian bishop), b1-h7 (the attack on h7), c1-h6, f1-a6, e1-a5.
+
+Diagonal test: two squares share a diagonal when the file difference equals the rank difference.
+
+Practise the board from both sides: blindfold, you must know it with White and with Black at the bottom.
+"""
+routine = [["coordinates_white", 3], ["coordinates_black", 2], ["colors_random", 4], ["diagonals_random", 4], ["walk_random", 2]]
+
+[[phases.exercises]]
+id = "colors_1_1"
+title = "Exercise 1.1: square colors"
+type = "quiz"
+pass = {}
+questions = [
+  { kind = "color", square = "e4" }, { kind = "color", square = "d4" }, { kind = "color", square = "f5" },
+  { kind = "color", square = "c7" }, { kind = "color", square = "g2" }, { kind = "color", square = "b6" },
+  { kind = "color", square = "h8" }, { kind = "color", square = "a8" }, { kind = "color", square = "e1" },
+  { kind = "color", square = "d8" }, { kind = "color", square = "f3" }, { kind = "color", square = "c2" },
+  { kind = "color", square = "a5" }, { kind = "color", square = "h4" }, { kind = "color", square = "b1" },
+  { kind = "color", square = "g7" }, { kind = "color", square = "d3" }, { kind = "color", square = "e6" },
+  { kind = "color", square = "c5" }, { kind = "color", square = "f8" }, { kind = "color", square = "h2" },
+  { kind = "color", square = "a3" }, { kind = "color", square = "g4" }, { kind = "color", square = "b7" },
+]
+
+[[phases.exercises]]
+id = "diagonals_1_2"
+title = "Exercise 1.2: same diagonal?"
+type = "quiz"
+pass = {}
+questions = [
+  { kind = "same_diagonal", a = "b3", b = "f7" }, { kind = "same_diagonal", a = "a4", b = "e8" },
+  { kind = "same_diagonal", a = "g5", b = "d8" }, { kind = "same_diagonal", a = "h5", b = "e8" },
+  { kind = "same_diagonal", a = "a3", b = "f8" }, { kind = "same_diagonal", a = "b2", b = "g6" },
+  { kind = "same_diagonal", a = "a2", b = "g8" }, { kind = "same_diagonal", a = "h3", b = "c8" },
+  { kind = "same_diagonal", a = "e1", b = "a5" }, { kind = "same_diagonal", a = "b1", b = "h7" },
+]
+
+[[phases.exercises]]
+id = "walk_1_3"
+title = "Exercise 1.3: walking the board"
+type = "quiz"
+pass = {}
+questions = [
+  { kind = "walk", from = "e4", steps = [[1, 2]] },
+  { kind = "walk", from = "d4", steps = [[0, 3]] },
+  { kind = "walk", from = "c3", steps = [[3, 3]] },
+  { kind = "walk", from = "g7", steps = [[-2, -1]] },
+  { kind = "walk", from = "b2", steps = [[5, 5]] },
+  { kind = "walk", from = "h8", steps = [[0, -7], [-3, 0]] },
+]
+
+[[phases.exercises]]
+id = "colors_random"
+title = "Colors: 20 in a row, under 2 s each"
+type = "drill"
+checkpoint = true
+generator = "color"
+count = 20
+pass = { streak = 20, max_seconds = 2.0 }
+
+[[phases.exercises]]
+id = "diagonals_center"
+title = "Both diagonals through the central squares"
+type = "quiz"
+checkpoint = true
+pass = {}
+questions = [
+  { kind = "diagonals_through", square = "d4" }, { kind = "diagonals_through", square = "e4" },
+  { kind = "diagonals_through", square = "d5" }, { kind = "diagonals_through", square = "e5" },
+  { kind = "diagonals_through", square = "c4" }, { kind = "diagonals_through", square = "f4" },
+]
+
+[[phases.exercises]]
+id = "coordinates_white"
+title = "Coordinate trainer, White at the bottom (25 in 30 s)"
+type = "drill"
+checkpoint = true
+generator = "coordinates_white"
+count = 200
+time_limit = 30
+pass = { min_correct = 25 }
+
+[[phases.exercises]]
+id = "coordinates_black"
+title = "Coordinate trainer, Black at the bottom (25 in 30 s)"
+type = "drill"
+checkpoint = true
+generator = "coordinates_black"
+count = 200
+time_limit = 30
+pass = { min_correct = 25 }
+
+[[phases.exercises]]
+id = "diagonals_random"
+title = "Same diagonal? (random)"
+type = "drill"
+generator = "same_diagonal"
+count = 10
+pass = {}
+
+[[phases.exercises]]
+id = "walk_random"
+title = "Walking the board (random)"
+type = "drill"
+generator = "walk"
+count = 10
+pass = {}
+
+[[phases]]
+number = 2
+title = "One piece at a time"
+goal = "Move pieces in your head without a board."
+notes = """
+A knight always changes color: if it stands on a light square, every square it attacks is dark. Use that to check your answers.
+
+On an empty board a rook always attacks 14 squares. A knight attacks between 2 (in a corner) and 8 (in the centre).
+
+Knight route parity: if start and target have the same color, the number of moves is even; if different, odd.
+"""
+routine = [["colors_random", 2], ["diagonals_random", 1], ["attacks_random", 7], ["routes_random", 5], ["scholars_mate", 5]]
+
+[[phases.exercises]]
+id = "attacks_2_1"
+title = "Exercise 2.1: what each piece sees"
+type = "quiz"
+pass = {}
+questions = [
+  { kind = "attacks", piece = "N", square = "e4" }, { kind = "attacks", piece = "N", square = "a1" },
+  { kind = "attacks", piece = "N", square = "g1" }, { kind = "attacks", piece = "N", square = "d5" },
+  { kind = "attacks", piece = "N", square = "h1" }, { kind = "attacks", piece = "N", square = "b8" },
+  { kind = "attacks", piece = "N", square = "f6" }, { kind = "attacks", piece = "N", square = "c2" },
+  { kind = "attacks", piece = "B", square = "d4" }, { kind = "attacks", piece = "B", square = "f1" },
+  { kind = "attacks", piece = "B", square = "b7" }, { kind = "attacks", piece = "B", square = "h6" },
+  { kind = "attacks", piece = "R", square = "d4" },
+  { kind = "attack_count", piece = "Q", square = "d4" }, { kind = "attack_count", piece = "Q", square = "a1" },
+]
+
+[[phases.exercises]]
+id = "routes_2_2"
+title = "Exercise 2.2: knight routes"
+type = "quiz"
+pass = {}
+questions = [
+  { kind = "route", from = "g1", to = "e5" }, { kind = "route", from = "b1", to = "d4" },
+  { kind = "route", from = "e4", to = "e5" }, { kind = "route", from = "c3", to = "c4" },
+  { kind = "route", from = "a1", to = "b2" }, { kind = "route", from = "d4", to = "h8" },
+  { kind = "route", from = "b1", to = "h8" }, { kind = "route", from = "a1", to = "h8" },
+  { kind = "route", from = "h1", to = "a8" },
+]
+
+[[phases.exercises]]
+id = "relations_2_3"
+title = "Exercise 2.3: relations"
+type = "quiz"
+pass = {}
+questions = [
+  { kind = "ask", position = "White: Qd1. Black: Kh5.", prompt = "White queen on d1, black king on h5. Is it check?", answer = { yes_no = true }, verify = "check:b", note = "Yes: the diagonal d1-e2-f3-g4-h5." },
+  { kind = "ask", position = "White: Bc4.", prompt = "White bishop on c4. Does it attack f7?", answer = { yes_no = true }, verify = "attacks:c4:f7", note = "c4-d5-e6-f7." },
+  { kind = "ask", position = "White: Qh5.", prompt = "White queen on h5. Does it attack f7?", answer = { yes_no = true }, verify = "attacks:h5:f7", note = "h5-g6-f7." },
+  { kind = "ask", position = "White: Nc7. Black: Ke8, Ra8.", prompt = "White knight on c7, black king on e8, black rook on a8. What is happening?", options = ["fork", "pin", "skewer", "discovered check"], answer = { choice = "fork" }, note = "The knight checks the king and attacks the rook at the same time." },
+  { kind = "ask", position = "White: Nc7. Black: Ke8, Ra8.", prompt = "Same position: list the squares of the black pieces the knight attacks.", answer = { squares = "a8 e8" }, verify = "attacked_by:c7" },
+  { kind = "ask", position = "White: Ra1. Black: Ka8.", prompt = "White rook on a1, black king on a8, nothing between them. Is it check?", answer = { yes_no = true }, verify = "check:b", note = "Yes: the a-file is open." },
+  { kind = "ask", position = "White: Bg5. Black: Nf6, Qd8.", prompt = "White bishop on g5, black knight on f6, black queen on d8. What is the bishop doing?", options = ["fork", "pin", "skewer", "discovered check"], answer = { choice = "pin" }, note = "The knight can't move without exposing the queen (g5-f6-e7-d8)." },
+  { kind = "ask", position = "White: Ke1. Black: Qh4.", prompt = "Black queen on h4, white king on e1, nothing on f2 or g3. Is it check?", answer = { yes_no = true }, verify = "check:w", note = "Yes: the diagonal h4-g3-f2-e1." },
+  { kind = "ask", position = "White: Nf3, Qd1. Black: Bg4, pawn e5.", prompt = "White knight on f3, white queen on d1, black pawn on e5, black bishop on g4. Why can't the knight safely take on e5?", options = ["it is pinned to the queen", "e5 is defended by a pawn", "a knight can't reach e5 from f3"], answer = { choice = "it is pinned to the queen" }, note = "If the knight leaves f3, the bishop takes the queen on d1. This is exactly the idea of Légal's mate." },
+]
+
+[[phases.exercises]]
+id = "fools_mate"
+title = "Fool's mate"
+type = "line"
+line = "fools_mate"
+mode = "stops"
+
+[[phases.exercises]]
+id = "scholars_mate"
+title = "Scholar's mate: explain the mate"
+type = "line"
+checkpoint = true
+line = "scholars_mate"
+mode = "stops"
+
+[[phases.exercises]]
+id = "knight_attacks_fast"
+title = "A knight's squares in under 10 s (10 in a row)"
+type = "drill"
+checkpoint = true
+generator = "knight_attacks"
+count = 10
+pass = { streak = 10, max_seconds = 10.0 }
+
+[[phases.exercises]]
+id = "corner_routes"
+title = "Knight from corner to opposite corner"
+type = "quiz"
+checkpoint = true
+pass = {}
+questions = [
+  { kind = "route", from = "a1", to = "h8" }, { kind = "route", from = "h1", to = "a8" },
+  { kind = "route", from = "a8", to = "h1" }, { kind = "route", from = "h8", to = "a1" },
+]
+
+[[phases.exercises]]
+id = "attacks_random"
+title = "Attacked squares (random)"
+type = "drill"
+generator = "attacks"
+count = 10
+pass = {}
+
+[[phases.exercises]]
+id = "routes_random"
+title = "Knight routes (random)"
+type = "drill"
+generator = "knight_route"
+count = 8
+pass = {}
+
+[[phases]]
+number = 3
+title = "Small positions"
+goal = "Hold a whole position in your head, with few pieces, and calculate."
+notes = """
+Read the position once, out loud. Then recite it back piece by piece before looking for the move: the app hides the position and asks you to list both sides first.
+
+Box method (rook endings): imagine the rook cutting the enemy king into a rectangular box. Each move, shrink the box or bring your king closer. You only need three things: where his king is, where yours is, and which line the rook cuts.
+
+The checking habit: from here on, every 5 moves, answer where both kings are and which pieces (yours and his) are attacked and undefended. The app asks you in every training game.
+"""
+routine = [["knight_attacks_fast", 3], ["mate1_3_1", 5], ["mate2_3_2", 7], ["endgame_kr", 10]]
+
+[[phases.exercises]]
+id = "mate1_3_1"
+title = "Exercise 3.1: mate in one (8 positions)"
+type = "quiz"
+checkpoint = true
+recall = true
+pass = {}
+questions = [
+  { kind = "mate1", position = "White: Kg6, Ra1. Black: Kg8.", note = "Ra8#: the rook checks along the 8th rank covering f8 and h8; the king on g6 covers f7, g7 and h7." },
+  { kind = "mate1", position = "White: Kg6, Qe1. Black: Kh8.", note = "Qe8#: the queen checks along the 8th rank and covers g8; the king on g6 covers g7 and h7." },
+  { kind = "mate1", position = "White: Kg1, Rd1, pawns f2, g2, h2. Black: Kg8, pawns f7, g7, h7.", note = "Rd8#: a back-rank mate; Black's own pawns trap the king." },
+  { kind = "mate1", position = "White: Kf6, Qg1. Black: Kh8.", note = "Qg7#: the queen is protected by the king on f6." },
+  { kind = "mate1", position = "White: Ka1, Ng5. Black: Kh8, Rg8, pawns g7, h7.", note = "Nf7#: smothered mate; g8, g7 and h7 are occupied by Black's own pieces and nothing can take the knight." },
+  { kind = "mate1", position = "White: Kb6, Qc1. Black: Ka8.", note = "Qc8#: the queen covers the 8th rank; the king on b6 covers a7 and b7." },
+  { kind = "mate1", position = "White: Kg1, Qh5, Bc4. Black: Ke8, Qd8, Bf8, pawns d7, f7.", note = "Qxf7#: the queen is protected by the bishop on c4; d7, d8 and f8 are occupied by Black's pieces and e7 is covered by the queen." },
+  { kind = "mate1", position = "White: Kh1, Ra7, Rb1. Black: Kh8.", note = "Rb8#: the rook on a7 cuts the 7th rank; the other rook mates on the 8th." },
+]
+
+[[phases.exercises]]
+id = "mate2_3_2"
+title = "Exercise 3.2: mate in two (pass with 4 of 5)"
+type = "quiz"
+checkpoint = true
+recall = true
+pass = { min_correct = 4 }
+questions = [
+  { kind = "mate2", position = "White: Kf6, Ra2. Black: Kg8.", hint = "The first move is not a check.", note = "1.Rh2! The king can only go to f8 (h8 is covered by the rook; f7, g7, h7 by the king). 1...Kf8 2.Rh8#." },
+  { kind = "mate2", position = "White: Kh1, Ra6, Rb5. Black: Kg8.", hint = "The rook staircase.", note = "1.Rb7 (or 1.Ra7): one rook cuts the 7th rank, the other mates on the 8th." },
+  { kind = "mate2", position = "White: Kg1, Qd2, Rd1, pawns f2, g2, h2. Black: Kg8, Qc7, Rd8, pawns f7, g7, h7.", note = "1.Qxd8+! Qxd8 2.Rxd8#: the queen removes the defender, the rook gives the back-rank mate." },
+  { kind = "mate2", position = "White: Kg1, Qc4, Bb3, Ng5, pawns f2, g2, h2. Black: Kh8, Rf8, pawns g7, h7.", hint = "Smothered mate.", note = "1.Qg8+!! Rxg8 2.Nf7#: the king can't take the queen because the bishop on b3 protects it; after Rxg8 the king is boxed in by its own pieces." },
+  { kind = "mate2", position = "White: Kg1, Re1, Re2, pawns f2, g2, h2. Black: Kg8, Ra8, Re8, pawns f7, g7, h7.", note = "1.Rxe8+! Rxe8 2.Rxe8#: two rooks on the same file beat one." },
+]
+
+[[phases.exercises]]
+id = "endgame_kq"
+title = "King and queen vs king: mate 3 times in a row"
+type = "game"
+checkpoint = true
+start = "White: Ke1, Qd1. Black: Ke5."
+goal = "mate"
+need = 3
+in_a_row = true
+check_habit = true
+
+[[phases.exercises]]
+id = "endgame_kr"
+title = "King and rook vs king: mate 3 times in a row"
+type = "game"
+checkpoint = true
+start = "White: Ke1, Ra1. Black: Ke5."
+goal = "mate"
+need = 3
+in_a_row = true
+check_habit = true
+
+[[phases.exercises]]
+id = "endgame_krr"
+title = "King and two rooks vs king: mate 3 times in a row"
+type = "game"
+start = "White: Ke1, Ra1, Rh1. Black: Ke5."
+goal = "mate"
+need = 3
+in_a_row = true
+check_habit = true
+
+[[phases.exercises]]
+id = "endgame_kp"
+title = "King and pawn vs king: win, or hold the draw when it is one"
+type = "game"
+start = "White: Ke4, pawn e3. Black: Ke6."
+goal = "hold"
+need = 1
+check_habit = true
+
+[[phases]]
+number = 4
+title = "Openings and traps in your head"
+goal = "Follow opening sequences and keep the position alive. The traps are short and end in mate: a clear reward."
+notes = """
+Read the moves, imagining the board. At each stop, answer without looking. If you get lost, start the line again. Repeat the same line on following days until it flows, then recite it from memory.
+"""
+routine = [["knight_attacks_fast", 3], ["ruy_lopez", 5], ["legal_trap", 10], ["caro_kann_trap", 2]]
+
+[[phases.exercises]]
+id = "ruy_lopez"
+title = "Ruy López: stops"
+type = "line"
+checkpoint = true
+line = "ruy_lopez"
+mode = "stops"
+
+[[phases.exercises]]
+id = "italian"
+title = "Italian Game: stops"
+type = "line"
+checkpoint = true
+line = "italian"
+mode = "stops"
+
+[[phases.exercises]]
+id = "sicilian"
+title = "Sicilian Defence: stops"
+type = "line"
+checkpoint = true
+line = "sicilian"
+mode = "stops"
+
+[[phases.exercises]]
+id = "legal_trap"
+title = "Trap 1: Légal's mate"
+type = "line"
+checkpoint = true
+line = "legal"
+mode = "stops"
+
+[[phases.exercises]]
+id = "caro_kann_trap"
+title = "Trap 2: smothered mate in the Caro-Kann"
+type = "line"
+checkpoint = true
+line = "caro_kann"
+mode = "stops"
+
+[[phases.exercises]]
+id = "blackburne_trap"
+title = "Trap 3: Blackburne Shilling Gambit (Black mates)"
+type = "line"
+checkpoint = true
+line = "blackburne_shilling"
+mode = "stops"
+
+[[phases.exercises]]
+id = "englund_trap"
+title = "Trap 4: Englund Gambit (Black mates)"
+type = "line"
+checkpoint = true
+line = "englund"
+mode = "stops"
+
+[[phases.exercises]]
+id = "legal_recite"
+title = "Recite Légal's mate from memory"
+type = "line"
+checkpoint = true
+line = "legal"
+mode = "recite"
+
+[[phases.exercises]]
+id = "caro_kann_recite"
+title = "Recite the Caro-Kann trap from memory"
+type = "line"
+checkpoint = true
+line = "caro_kann"
+mode = "recite"
+
+[[phases]]
+number = 5
+title = "Classic games by notation"
+goal = "Follow whole games, with middlegame and sacrifices, from the moves alone."
+notes = """
+Start with the version with stops. Once you get every stop right, read the full game without interruption. Finally, recite it from memory.
+
+Plan for the two weeks: days 1-3 Réti vs Tartakower, days 4-7 the Opera Game, days 8-10 Lasker vs Thomas, days 11-14 the Immortal Game (final challenge).
+"""
+routine = [["knight_attacks_fast", 3], ["opera_stops", 18], ["opera_read", 4]]
+
+[[phases.exercises]]
+id = "reti_stops"
+title = "Réti vs Tartakower, Vienna 1910: stops"
+type = "line"
+checkpoint = true
+line = "reti_tartakower"
+mode = "stops"
+
+[[phases.exercises]]
+id = "opera_stops"
+title = "The Opera Game, Paris 1858: stops"
+type = "line"
+checkpoint = true
+line = "opera"
+mode = "stops"
+
+[[phases.exercises]]
+id = "lasker_stops"
+title = "Lasker vs Thomas, London 1912: stops"
+type = "line"
+checkpoint = true
+line = "lasker_thomas"
+mode = "stops"
+
+[[phases.exercises]]
+id = "immortal_stops"
+title = "The Immortal Game, London 1851: stops"
+type = "line"
+checkpoint = true
+line = "immortal"
+mode = "stops"
+
+[[phases.exercises]]
+id = "opera_recite"
+title = "Recite the Opera Game from memory"
+type = "line"
+checkpoint = true
+line = "opera"
+mode = "recite"
+
+[[phases.exercises]]
+id = "immortal_read"
+title = "Read the Immortal straight through, then rebuild the final position"
+type = "line"
+checkpoint = true
+line = "immortal"
+mode = "read"
+
+[[phases.exercises]]
+id = "opera_read"
+title = "Read the Opera Game straight through, then rebuild the final position"
+type = "line"
+line = "opera"
+mode = "read"
+
+[[phases.exercises]]
+id = "reti_recite"
+title = "Recite Réti vs Tartakower from memory"
+type = "line"
+line = "reti_tartakower"
+mode = "recite"
+
+[[phases]]
+number = 6
+title = "Playing with training wheels"
+goal = "Play whole games, first with help, then without."
+notes = """
+Step 1, invisible pieces: the board and its squares stay visible, the pieces don't. Play a low level, slowly.
+
+Step 2, eyes off the board: a normal blindfold game. Answer the checking questions every 5 moves.
+
+Step 3, recovery: when you get lost (it will happen), don't give up. Type `recall` to rebuild the position: list your pieces and his, then carry on. Recovering is as important a skill as not getting lost.
+
+Tips: start with an opening you know well; prefer simple positions, trading pieces when in doubt; after the game, note the move where the position started to blur.
+"""
+routine = [["ghost_games", 25]]
+
+[[phases.exercises]]
+id = "ghost_games"
+title = "Invisible pieces: 3 games with no illegal move"
+type = "game"
+checkpoint = true
+level = 800
+ghost = true
+check_habit = true
+goal = "finish"
+need = 3
+no_illegal = true
+
+[[phases.exercises]]
+id = "blind_game"
+title = "One whole game without looking at the board"
+type = "game"
+checkpoint = true
+level = 800
+check_habit = true
+goal = "finish"
+need = 1
+no_peeks = true
+
+[[phases]]
+number = 7
+title = "The cup of coffee"
+goal = "Turn the effort into a habit, then graduate."
+notes = """
+Week plan: days 1-3, one blindfold game a day, going up a level after two wins in a row; days 4-5, a blindfold game against a person; day 6, review one of your blindfold games on a board and mark where you got confused, then train that kind of position; day 7, rest, or a classic game from memory for fun.
+
+Graduation: retake the diagnostic and get everything right, fast; play a whole blindfold game of 30+ moves without getting lost and without an illegal move, answering "where is your knight?" at any moment.
+
+Maintenance: 2-3 times a week, a blindfold game or a short game read from notation. Now and then, mate-in-2 problems read as written positions. To go further: faster time controls, stronger opponents, or two blindfold games at once.
+"""
+routine = [["daily_game", 25]]
+
+[[phases.exercises]]
+id = "graduation_diagnostic"
+title = "Graduation: the diagnostic again, all right, under 10 s each"
+type = "quiz"
+checkpoint = true
+from = "diagnostic"
+pass = { streak = 5, max_seconds = 10.0 }
+
+[[phases.exercises]]
+id = "graduation_game"
+title = "Graduation: 30+ moves, no illegal move, no peek, every question right"
+type = "game"
+checkpoint = true
+check_habit = true
+piece_questions = true
+goal = "finish"
+need = 1
+min_moves = 30
+no_illegal = true
+no_peeks = true
+perfect_quiz = true
+
+[[phases.exercises]]
+id = "daily_game"
+title = "Daily blindfold game at your ladder level"
+type = "game"
+check_habit = true
+piece_questions = true
+goal = "finish"
+need = 1
+
+# ---------------------------------------------------------------- lines (moves with stops)
+
+[[lines]]
+id = "fools_mate"
+title = "Fool's mate"
+intro = "The fastest possible mate. Read it once, then follow it with your eyes closed."
+moves = "1.f3 e5 2.g4 Qh4#"
+
+[[lines.stops]]
+after = "2...Qh4#"
+prompt = "List the white king's flight squares."
+answer = { squares = "none" }
+verify = "flight"
+
+[[lines.stops]]
+after = "2...Qh4#"
+prompt = "List the empty squares between the black queen and the white king."
+answer = { squares = "g3 f2" }
+verify = "between:h4:e1"
+note = "White's own pawn moves opened the diagonal h4-g3-f2-e1."
+
+[[lines]]
+id = "scholars_mate"
+title = "Scholar's mate"
+intro = "Read it once, then follow it with your eyes closed. At the mate, work out why it is mate."
+moves = "1.e4 e5 2.Bc4 Nc6 3.Qh5 Nf6 4.Qxf7#"
+
+[[lines.stops]]
+after = "3.Qh5"
+prompt = "Which black pawn do the white queen and bishop both attack? Give its square."
+answer = { square = "f7" }
+verify = "holds:p"
+
+[[lines.stops]]
+after = "4.Qxf7#"
+prompt = "Which white piece protects the queen on f7? Give its square."
+answer = { squares = "c4" }
+verify = "attackers:f7:w"
+
+[[lines.stops]]
+after = "4.Qxf7#"
+prompt = "List the black king's flight squares."
+answer = { squares = "none" }
+verify = "flight"
+
+[[lines]]
+id = "ruy_lopez"
+title = "Ruy López"
+moves = "1.e4 e5 2.Nf3 Nc6 3.Bb5 a6 4.Ba4 Nf6 5.O-O Be7"
+
+[[lines.stops]]
+after = "5...Be7"
+prompt = "Where is the white bishop?"
+answer = { square = "a4" }
+verify = "holds:B"
+
+[[lines.stops]]
+after = "5...Be7"
+prompt = "After castling, where is the white king?"
+answer = { square = "g1" }
+verify = "holds:K"
+
+[[lines.stops]]
+after = "5...Be7"
+prompt = "And the rook that castled?"
+answer = { square = "f1" }
+verify = "holds:R"
+
+[[lines.stops]]
+after = "5...Be7"
+prompt = "Which black piece does the white bishop aim at? Give its square."
+answer = { square = "c6" }
+verify = "holds:n"
+
+[[lines]]
+id = "italian"
+title = "Italian Game"
+moves = "1.e4 e5 2.Nf3 Nc6 3.Bc4 Bc5 4.c3 Nf6 5.d4 exd4 6.cxd4 Bb4+ 7.Bd2 Bxd2+ 8.Nbxd2 d5"
+
+[[lines.stops]]
+after = "8...d5"
+prompt = "List the squares of the two white knights."
+answer = { squares = "d2 f3" }
+verify = "pieces:N"
+
+[[lines.stops]]
+after = "8...d5"
+prompt = "Which white pieces does the pawn on d5 attack? List their squares."
+answer = { squares = "c4 e4" }
+verify = "attacked_by:d5"
+
+[[lines.stops]]
+after = "8...d5"
+prompt = "How many bishops does Black have left?"
+answer = { count = 1 }
+verify = "pieces:b"
+
+[[lines.stops]]
+after = "8...d5"
+prompt = "Where is it?"
+answer = { squares = "c8" }
+verify = "pieces:b"
+note = "The other black bishop was traded on d2."
+
+[[lines]]
+id = "sicilian"
+title = "Sicilian Defence"
+moves = "1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 a6"
+
+[[lines.stops]]
+after = "5...a6"
+prompt = "Which white piece is on d4?"
+options = ["knight", "queen", "pawn", "bishop"]
+answer = { choice = "knight" }
+verify = "holds_choice:d4"
+
+[[lines.stops]]
+after = "5...a6"
+prompt = "Which black pawn has disappeared?"
+options = ["a-pawn", "c-pawn", "d-pawn", "e-pawn"]
+answer = { choice = "c-pawn" }
+note = "It was traded on d4."
+
+[[lines.stops]]
+after = "5...a6"
+prompt = "Which black piece attacks the pawn on e4? Give its square."
+answer = { squares = "f6" }
+verify = "attackers:e4:b"
+
+[[lines.stops]]
+after = "5...a6"
+prompt = "Which white piece defends e4? Give its square."
+answer = { squares = "c3" }
+verify = "attackers:e4:w"
+
+[[lines]]
+id = "legal"
+title = "Légal's mate (18th century)"
+moves = "1.e4 e5 2.Nf3 d6 3.Bc4 Bg4 4.Nc3 g6 5.Nxe5 Bxd1 6.Bxf7+ Ke7 7.Nd5#"
+
+[[lines.stops]]
+after = "4...g6"
+prompt = "What is the bishop on g4 doing to the knight on f3?"
+options = ["fork", "pin", "skewer", "nothing"]
+answer = { choice = "pin" }
+
+[[lines.stops]]
+after = "4...g6"
+prompt = "Which white piece behind the knight would the bishop hit? Give its square."
+answer = { square = "d1" }
+verify = "holds:Q"
+
+[[lines.stops]]
+after = "5.Nxe5"
+prompt = "The knight ignored the pin and left the queen. Does the knight on e5 attack f7?"
+answer = { yes_no = true }
+verify = "attacks:e5:f7"
+
+[[lines.stops]]
+after = "5.Nxe5"
+prompt = "Which other white piece attacks f7? Give its square."
+answer = { square = "c4" }
+verify = "holds:B"
+
+[[lines.stops]]
+after = "7.Nd5#"
+prompt = "Which white piece gives check? Give its square."
+answer = { squares = "d5" }
+verify = "checkers"
+
+[[lines.stops]]
+after = "7.Nd5#"
+prompt = "List the black king's flight squares."
+answer = { squares = "none" }
+verify = "flight"
+
+[[lines.stops]]
+after = "7.Nd5#"
+prompt = "Which white piece covers d7? Give its square."
+answer = { squares = "e5" }
+verify = "attackers:d7:w"
+
+[[lines.stops]]
+after = "7.Nd5#"
+prompt = "Which white piece covers e6? Give its square."
+answer = { squares = "f7" }
+verify = "attackers:e6:w"
+note = "The bishop on f7 also covers e8. f6 is covered by the knight on d5, and d6, d8, f8 hold Black's own pieces."
+
+[[lines]]
+id = "caro_kann"
+title = "Smothered mate in the Caro-Kann"
+moves = "1.e4 c6 2.d4 d5 3.Nc3 dxe4 4.Nxe4 Nd7 5.Qe2 Ngf6 6.Nd6#"
+
+[[lines.stops]]
+after = "5.Qe2"
+prompt = "The queen stands behind the knight on the e-file. When the knight leaves, which black piece does she hit first? Give its square."
+answer = { square = "e7" }
+verify = "holds:p"
+note = "And behind the e7 pawn, the king on e8."
+
+[[lines.stops]]
+after = "6.Nd6#"
+prompt = "Can the e7 pawn take the knight on d6?"
+answer = { yes_no = false }
+
+[[lines.stops]]
+after = "6.Nd6#"
+prompt = "Why not?"
+options = ["it is pinned by the queen on e2", "pawns can't capture knights", "d6 is protected by a bishop"]
+answer = { choice = "it is pinned by the queen on e2" }
+
+[[lines.stops]]
+after = "6.Nd6#"
+prompt = "List the black king's flight squares."
+answer = { squares = "none" }
+verify = "flight"
+note = "d7, d8, f7 and f8 hold Black's own pieces: the king is smothered."
+
+[[lines]]
+id = "blackburne_shilling"
+title = "Blackburne Shilling Gambit"
+intro = "This time Black gives the mate."
+moves = "1.e4 e5 2.Nf3 Nc6 3.Bc4 Nd4 4.Nxe5 Qg5 5.Nxf7 Qxg2 6.Rf1 Qxe4+ 7.Be2 Nf3#"
+
+[[lines.stops]]
+after = "4...Qg5"
+prompt = "The black queen attacks a knight. Give the knight's square."
+answer = { square = "e5" }
+verify = "holds:N"
+
+[[lines.stops]]
+after = "4...Qg5"
+prompt = "It also attacks a pawn on the g-file. Give its square."
+answer = { square = "g2" }
+verify = "holds:P"
+
+[[lines.stops]]
+after = "5...Qxg2"
+prompt = "Which white piece does the queen threaten now? Give its square."
+answer = { square = "h1" }
+verify = "holds:R"
+
+[[lines.stops]]
+after = "7...Nf3#"
+prompt = "Can the bishop on e2 take the knight on f3?"
+answer = { yes_no = false }
+
+[[lines.stops]]
+after = "7...Nf3#"
+prompt = "Why not?"
+options = ["it is pinned by the queen on e4", "f3 is protected by a pawn", "bishops can't move backwards"]
+answer = { choice = "it is pinned by the queen on e4" }
+
+[[lines.stops]]
+after = "7...Nf3#"
+prompt = "List the white king's flight squares."
+answer = { squares = "none" }
+verify = "flight"
+
+[[lines]]
+id = "englund"
+title = "Englund Gambit"
+intro = "Black mates again."
+moves = "1.d4 e5 2.dxe5 Nc6 3.Nf3 Qe7 4.Bf4 Qb4+ 5.Bd2 Qxb2 6.Bc3 Bb4 7.Qd2 Bxc3 8.Qxc3 Qc1#"
+
+[[lines.stops]]
+after = "4...Qb4+"
+prompt = "Besides giving check, the queen attacks a pawn. Give its square."
+answer = { square = "b2" }
+verify = "holds:P"
+
+[[lines.stops]]
+after = "5...Qxb2"
+prompt = "Which white piece in the corner is attacked? Give its square."
+answer = { square = "a1" }
+verify = "holds:R"
+
+[[lines.stops]]
+after = "8...Qc1#"
+prompt = "Why can't the queen on c3 take the queen on c1?"
+options = ["a white pawn on c2 is in the way", "the queen on c3 is pinned", "c1 is protected"]
+answer = { choice = "a white pawn on c2 is in the way" }
+
+[[lines.stops]]
+after = "8...Qc1#"
+prompt = "List the white king's flight squares."
+answer = { squares = "none" }
+verify = "flight"
+
+[[lines]]
+id = "reti_tartakower"
+title = "Réti vs Tartakower, Vienna 1910"
+intro = "A famous miniature: the white queen is sacrificed and a double check decides."
+moves = "1.e4 c6 2.d4 d5 3.Nc3 dxe4 4.Nxe4 Nf6 5.Qd3 e5 6.dxe5 Qa5+ 7.Bd2 Qxe5 8.O-O-O Nxe4 9.Qd8+ Kxd8 10.Bg5+ Kc7 11.Bd8#"
+
+[[lines.stops]]
+after = "7...Qxe5"
+prompt = "Where is the black queen?"
+answer = { square = "e5" }
+verify = "holds:q"
+
+[[lines.stops]]
+after = "7...Qxe5"
+prompt = "Where is the white queen?"
+answer = { square = "d3" }
+verify = "holds:Q"
+
+[[lines.stops]]
+after = "8...Nxe4"
+prompt = "Where is the white king?"
+answer = { square = "c1" }
+verify = "holds:K"
+
+[[lines.stops]]
+after = "8...Nxe4"
+prompt = "Where is the rook that castled?"
+answer = { square = "d1" }
+verify = "holds:R"
+
+[[lines.stops]]
+after = "8...Nxe4"
+prompt = "Which white piece attacks the knight on e4? Give its square."
+answer = { squares = "d3" }
+verify = "attackers:e4:w"
+
+[[lines.stops]]
+after = "10.Bg5+"
+prompt = "How many white pieces give check?"
+answer = { count = 2 }
+verify = "checkers"
+
+[[lines.stops]]
+after = "10.Bg5+"
+prompt = "List the squares of the checking pieces."
+answer = { squares = "g5 d1" }
+verify = "checkers"
+
+[[lines.stops]]
+after = "10.Bg5+"
+prompt = "What is this called?"
+options = ["double check", "skewer", "fork", "pin"]
+answer = { choice = "double check" }
+note = "Against a double check only the king can move."
+
+[[lines.stops]]
+after = "11.Bd8#"
+prompt = "List the black king's flight squares."
+answer = { squares = "none" }
+verify = "flight"
+
+[[lines.stops]]
+after = "11.Bd8#"
+prompt = "Which white piece covers d7 (and d6)? Give its square."
+answer = { squares = "d1" }
+verify = "attackers:d7:w"
+
+[[lines.stops]]
+after = "11.Bd8#"
+prompt = "Which white piece protects the bishop on d8? Give its square."
+answer = { squares = "d1" }
+verify = "attackers:d8:w"
+note = "b6 is on the line of the check (d8-c7-b6); b7, c6 hold pawns, b8 the knight and c8 the bishop. If Black had played 10...Ke8, 11.Rd8# was mate."
+
+[[lines]]
+id = "opera"
+title = "The Opera Game: Morphy vs Duke of Brunswick and Count Isouard, Paris 1858"
+intro = "Morphy develops fast, sacrifices material and mates with the last pieces left."
+moves = "1.e4 e5 2.Nf3 d6 3.d4 Bg4 4.dxe5 Bxf3 5.Qxf3 dxe5 6.Bc4 Nf6 7.Qb3 Qe7 8.Nc3 c6 9.Bg5 b5 10.Nxb5 cxb5 11.Bxb5+ Nbd7 12.O-O-O Rd8 13.Rxd7 Rxd7 14.Rd1 Qe6 15.Bxd7+ Nxd7 16.Qb8+ Nxb8 17.Rd8#"
+
+[[lines.stops]]
+after = "6.Bc4"
+prompt = "Where is the white queen?"
+answer = { square = "f3" }
+verify = "holds:Q"
+
+[[lines.stops]]
+after = "6.Bc4"
+prompt = "Queen and bishop aim at the same square: White threatens mate there. Which square?"
+answer = { squares = "f7" }
+verify = "attacked_by:c4"
+
+[[lines.stops]]
+after = "6...Nf6"
+prompt = "The knight defends by blocking the queen's line. On which square?"
+answer = { square = "f6" }
+verify = "holds:n"
+
+[[lines.stops]]
+after = "7...Qe7"
+prompt = "Which black pawn does the queen on b3 attack directly? Give its square."
+answer = { squares = "b7" }
+verify = "attacked_by:b3"
+note = "She also eyes f7 in a battery behind the bishop on c4. Morphy prefers developing with 8.Nc3: after 8.Qxb7 Black answers 8...Qb4+ and trades queens."
+
+[[lines.stops]]
+after = "7...Qe7"
+prompt = "Where did Black put the queen to defend f7?"
+answer = { square = "e7" }
+verify = "holds:q"
+
+[[lines.stops]]
+after = "9...b5"
+prompt = "Which black piece is pinned by the bishop on g5? Give its square."
+answer = { squares = "f6" }
+verify = "attacked_by:g5"
+
+[[lines.stops]]
+after = "9...b5"
+prompt = "Against which piece? Give its square."
+answer = { square = "e7" }
+verify = "holds:q"
+
+[[lines.stops]]
+after = "12...Rd8"
+prompt = "Where is the white king?"
+answer = { square = "c1" }
+verify = "holds:K"
+
+[[lines.stops]]
+after = "12...Rd8"
+prompt = "List the squares of the two white rooks."
+answer = { squares = "d1 h1" }
+verify = "pieces:R"
+
+[[lines.stops]]
+after = "12...Rd8"
+prompt = "Which black piece is pinned by the bishop on b5? Give its square."
+answer = { squares = "d7" }
+verify = "attacked_by:b5"
+
+[[lines.stops]]
+after = "14...Qe6"
+prompt = "How many white pieces attack d7?"
+answer = { count = 2 }
+verify = "attackers:d7:w"
+
+[[lines.stops]]
+after = "14...Qe6"
+prompt = "List their squares."
+answer = { squares = "b5 d1" }
+verify = "attackers:d7:w"
+
+[[lines.stops]]
+after = "17.Rd8#"
+prompt = "List the black king's flight squares."
+answer = { squares = "none" }
+verify = "flight"
+
+[[lines.stops]]
+after = "17.Rd8#"
+prompt = "Which white piece protects the rook on d8? Give its square."
+answer = { squares = "g5" }
+verify = "attackers:d8:w"
+
+[[lines.stops]]
+after = "17.Rd8#"
+prompt = "Which white piece covers e7? Give its square."
+answer = { squares = "g5" }
+verify = "attackers:e7:w"
+note = "d7 is covered by the rook, f7 holds a pawn, f8 the bishop; the knight that could have captured has just gone to b8."
+
+[[lines]]
+id = "lasker_thomas"
+title = "Edward Lasker vs George Thomas, London 1912"
+intro = "One of the most famous king hunts: the queen is sacrificed and the black king is dragged from g8 to g1."
+moves = "1.d4 e6 2.Nf3 f5 3.Nc3 Nf6 4.Bg5 Be7 5.Bxf6 Bxf6 6.e4 fxe4 7.Nxe4 b6 8.Ne5 O-O 9.Bd3 Bb7 10.Qh5 Qe7 11.Qxh7+ Kxh7 12.Nxf6+ Kh6 13.Neg4+ Kg5 14.h4+ Kf4 15.g3+ Kf3 16.Be2+ Kg2 17.Rh2+ Kg1 18.Kd2#"
+
+[[lines.stops]]
+after = "7...b6"
+prompt = "List the squares of the two white knights."
+answer = { squares = "e4 f3" }
+verify = "pieces:N"
+
+[[lines.stops]]
+after = "7...b6"
+prompt = "Where is White's remaining bishop?"
+answer = { squares = "f1" }
+verify = "pieces:B"
+
+[[lines.stops]]
+after = "10...Qe7"
+prompt = "Where is the black king?"
+answer = { square = "g8" }
+verify = "holds:k"
+
+[[lines.stops]]
+after = "10...Qe7"
+prompt = "Which black pawn does the queen on h5 attack? Give its square."
+answer = { square = "h7" }
+verify = "holds:p"
+
+[[lines.stops]]
+after = "10...Qe7"
+prompt = "Which white bishop also aims at h7? Give its square."
+answer = { square = "d3" }
+verify = "holds:B"
+
+[[lines.stops]]
+after = "10...Qe7"
+prompt = "Which white piece stands in its way? Give its square."
+answer = { squares = "e4" }
+verify = "between:d3:h7:occupied"
+
+[[lines.stops]]
+after = "12.Nxf6+"
+prompt = "List the squares of the pieces giving check."
+answer = { squares = "d3 f6" }
+verify = "checkers"
+note = "A double check: when the knight left e4, it opened the bishop's diagonal to h7."
+
+[[lines.stops]]
+after = "14...Kf4"
+prompt = "Where is the black king now?"
+answer = { square = "f4" }
+verify = "holds:k"
+
+[[lines.stops]]
+after = "17...Kg1"
+prompt = "Where is the black king?"
+answer = { square = "g1" }
+verify = "holds:k"
+
+[[lines.stops]]
+after = "17...Kg1"
+prompt = "Which piece stands between the rook on a1 and the black king? Give its square."
+answer = { squares = "e1" }
+verify = "between:a1:g1:occupied"
+
+[[lines.stops]]
+after = "18.Kd2#"
+prompt = "A king move gives mate. Which white piece gives check? Give its square."
+answer = { squares = "a1" }
+verify = "checkers"
+
+[[lines.stops]]
+after = "18.Kd2#"
+prompt = "List the black king's flight squares."
+answer = { squares = "none" }
+verify = "flight"
+note = "f1 is covered by the rook and the bishop on e2; h1 and g2 by the rook on h2; f2 holds a pawn protected by the knight on g4. 18.O-O-O# was mate too."
+
+[[lines]]
+id = "immortal"
+title = "The Immortal Game: Anderssen vs Kieseritzky, London 1851"
+intro = "Anderssen gives up a bishop, both rooks and the queen, and mates with the minor pieces. 23 moves: your endurance test before playing."
+moves = "1.e4 e5 2.f4 exf4 3.Bc4 Qh4+ 4.Kf1 b5 5.Bxb5 Nf6 6.Nf3 Qh6 7.d3 Nh5 8.Nh4 Qg5 9.Nf5 c6 10.g4 Nf6 11.Rg1 cxb5 12.h4 Qg6 13.h5 Qg5 14.Qf3 Ng8 15.Bxf4 Qf6 16.Nc3 Bc5 17.Nd5 Qxb2 18.Bd6 Bxg1 19.e5 Qxa1+ 20.Ke2 Na6 21.Nxg7+ Kd8 22.Qf6+ Nxf6 23.Be7#"
+
+[[lines.stops]]
+after = "4.Kf1"
+prompt = "The king left the check. Where is the black queen that gave it?"
+answer = { square = "h4" }
+verify = "holds:q"
+
+[[lines.stops]]
+after = "4.Kf1"
+prompt = "Can White still castle?"
+answer = { yes_no = false }
+note = "The king has moved, so castling is gone for good."
+
+[[lines.stops]]
+after = "9...c6"
+prompt = "Where is the knight that jumped from f3?"
+answer = { square = "f5" }
+verify = "holds:N"
+
+[[lines.stops]]
+after = "9...c6"
+prompt = "Which black piece threatens the bishop on b5? Give its square."
+answer = { squares = "c6" }
+verify = "attackers:b5:b"
+
+[[lines.stops]]
+after = "11...cxb5"
+prompt = "Which white piece has White given up?"
+options = ["bishop", "knight", "rook", "queen"]
+answer = { choice = "bishop" }
+
+[[lines.stops]]
+after = "11...cxb5"
+prompt = "Where is the rook that moved?"
+answer = { square = "g1" }
+verify = "holds:R"
+
+[[lines.stops]]
+after = "16...Bc5"
+prompt = "List the squares of the two white knights."
+answer = { squares = "c3 f5" }
+verify = "pieces:N"
+
+[[lines.stops]]
+after = "16...Bc5"
+prompt = "Which white piece does the bishop on c5 attack? Give its square."
+answer = { squares = "g1" }
+verify = "attacked_by:c5"
+
+[[lines.stops]]
+after = "17...Qxb2"
+prompt = "Which white piece does the queen threaten to take with check? Give its square."
+answer = { square = "a1" }
+verify = "holds:R"
+
+[[lines.stops]]
+after = "20.Ke2"
+prompt = "White has no rooks left. Where is the white king?"
+answer = { square = "e2" }
+verify = "holds:K"
+
+[[lines.stops]]
+after = "20.Ke2"
+prompt = "Where is the black queen?"
+answer = { square = "a1" }
+verify = "holds:q"
+
+[[lines.stops]]
+after = "23.Be7#"
+prompt = "List the black king's flight squares."
+answer = { squares = "none" }
+verify = "flight"
+
+[[lines.stops]]
+after = "23.Be7#"
+prompt = "Which white piece protects the bishop on e7? Give its square."
+answer = { squares = "d5" }
+verify = "attackers:e7:w"
+
+[[lines.stops]]
+after = "23.Be7#"
+prompt = "Which white piece covers e8? Give its square."
+answer = { squares = "g7" }
+verify = "attackers:e8:w"
+note = "c7 is covered by the knight on d5; d7 holds a pawn and c8 the bishop."
+
+# ---------------------------------------------------------------- when stuck
+
+[[stuck]]
+problem = "I forget where the pieces are in the middle of a game."
+advice = "You are skipping the checking habit. Do it every 5 moves, no exceptions, even when it feels unnecessary. If you still forget, go back to Phase 5 and follow games: they train exactly this."
+
+[[stuck]]
+problem = "I mix up squares, f6 with g6."
+advice = "Layer 1 (the map) isn't automatic yet. Go back to the Phase 1 routine for 3 days. It isn't a step back: it is the base everything else stands on."
+
+[[stuck]]
+problem = "The knight confuses me."
+advice = "Use the color trick (a knight always changes color) to check every move. Train more Phase 2 knight routes."
+
+[[stuck]]
+problem = "I get tired very quickly."
+advice = "Normal in the first weeks. Shorten the sessions and train more often. Train when you are rested, not at 11 pm after a full day."
+
+[[stuck]]
+problem = "I have been stuck in a phase for more than a week."
+advice = "Split the checkpoint into smaller goals. If the goal is 20 colors in a row, start with 10. Small, steady progress wins."
+
+[[stuck]]
+problem = "Blindfolded I play much worse than normally."
+advice = "Expected. The gap shrinks with time. At first prefer simple positions and trades: the goal is to finish games, not to win them all."

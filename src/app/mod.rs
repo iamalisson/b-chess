@@ -1,28 +1,35 @@
-//! App state and input: screens, menu, new-game setup, dialogs, and the game loop.
+//! App state and the event loop: screens, dialogs, starting, saving and finishing games.
+//! Input for each area lives in `play` and `training`.
+
+mod play;
+mod training;
+
+pub use training::{Activity, HOME_EXTRAS, Run, Training, View};
 
 use crate::{
     engine::Engine,
     game::Game,
-    levels::{Rng, spec, step},
+    levels::{spec, step},
     store::{
-        Record, SavedGame, append_history, expand_tilde, export_text, import_text, load_history,
-        load_saved, plural, save_settings, today, write_history, write_saved,
+        Mode, Record, SavedGame, Slot, append_history, expand_tilde, export_text, import_text,
+        load_history, load_saved, plural, today, write_history, write_saved,
     },
-    theme::{ACCENT, BACKGROUNDS, BG, bg_name},
+    theme::{ACCENT, BG, bg_name},
+    training::progress::is_event_line,
     ui::popup,
 };
 use ratatui::{
     DefaultTerminal,
-    crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
+    crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
     style::Color as Tc,
     text::Line,
     widgets::ListState,
 };
-use shakmaty::Color;
 use std::{
     fs, io,
     path::{Path, PathBuf},
     sync::atomic::Ordering,
+    time::Duration,
 };
 
 pub enum Screen {
@@ -30,6 +37,7 @@ pub enum Screen {
     Setup,
     Game,
     History,
+    Training,
 }
 
 pub enum Modal {
@@ -41,6 +49,7 @@ pub enum Modal {
 pub enum Item {
     Resume,
     New,
+    Training,
     History,
     Export,
     Import,
@@ -71,6 +80,7 @@ pub struct App {
     pub saved: Option<SavedGame>,
     pub game: Option<Game>,
     pub msg: Option<(String, Tc)>,
+    pub training: Training,
 }
 
 impl App {
@@ -89,15 +99,16 @@ impl App {
             weights,
             lc0,
             history: load_history(),
-            saved: load_saved(),
+            saved: load_saved(Slot::Play),
             game: None,
             msg: None,
+            training: Training::load(),
         }
     }
 
     /// Current ladder level: where the last ladder game left you, or the bottom.
     pub fn ladder_level(&self) -> u32 {
-        let last = self.history.iter().rev().find(|r| r.ladder);
+        let last = self.history.iter().rev().find(|r| r.mode.is_ladder());
         step(&self.levels, last.map_or(self.levels[0], |r| r.next), 0)
     }
 
@@ -114,6 +125,7 @@ impl App {
         };
         v.extend([
             Item::New,
+            Item::Training,
             Item::History,
             Item::Export,
             Item::Import,
@@ -133,6 +145,7 @@ impl App {
             }
             Item::New if self.saved.is_some() => "New game  (replaces saved game)".into(),
             Item::New => "New game".into(),
+            Item::Training => "Training: blindfold course".into(),
             Item::History => "History".into(),
             Item::Export => "Export progress".into(),
             Item::Import => "Import progress".into(),
@@ -144,10 +157,16 @@ impl App {
 
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
         loop {
+            // A timed drill ends when its clock runs out, not on the next key press.
+            self.training.tick();
             terminal.draw(|f| self.draw(f))?;
             // The bot moves between frames, so your move is on screen while it thinks.
             if self.game.as_ref().is_some_and(|g| g.thinking) {
                 self.bot_move();
+                continue;
+            }
+            // Timed drills redraw their clock even without input.
+            if self.training.ticking() && !event::poll(Duration::from_millis(200))? {
                 continue;
             }
             let Event::Key(k) = event::read()? else {
@@ -173,15 +192,14 @@ impl App {
                             false
                         }
                         Screen::History => {
-                            if matches!(
-                                k.code,
-                                KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q' | 'h')
-                            ) {
-                                self.screen = Screen::Menu;
-                            }
+                            self.history_key(k.code);
                             false
                         }
                         Screen::Game => self.game_key(k),
+                        Screen::Training => {
+                            self.training_key(k.code, terminal)?;
+                            false
+                        }
                     }
                 };
             if quit {
@@ -192,120 +210,6 @@ impl App {
                 return Ok(());
             }
         }
-    }
-
-    pub fn menu_key(&mut self, code: KeyCode, terminal: &mut DefaultTerminal) -> io::Result<bool> {
-        let item = match code {
-            KeyCode::Up | KeyCode::Char('k') => {
-                self.menu.select_previous();
-                return Ok(false);
-            }
-            KeyCode::Down | KeyCode::Char('j') => {
-                self.menu.select_next();
-                return Ok(false);
-            }
-            KeyCode::Enter => {
-                let items = self.items();
-                items[self.menu.selected().unwrap_or(0).min(items.len() - 1)]
-            }
-            KeyCode::Char('r') if self.saved.is_some() => Item::Resume,
-            KeyCode::Char('n' | 'p') => Item::New,
-            KeyCode::Char('h') => Item::History,
-            KeyCode::Char('e') => Item::Export,
-            KeyCode::Char('i') => Item::Import,
-            KeyCode::Char('b') => Item::Background,
-            KeyCode::Char('?') => Item::Help,
-            KeyCode::Char('q') | KeyCode::Esc => Item::Quit,
-            _ => return Ok(false),
-        };
-        match item {
-            Item::Resume => {
-                let saved = self.saved.take().unwrap();
-                self.start_game(terminal, saved)?;
-            }
-            Item::New => {
-                let ladder = self.ladder_level();
-                self.setup.level = self.levels.iter().position(|&l| l == ladder).unwrap_or(0);
-                self.setup.row = 0;
-                self.screen = Screen::Setup;
-            }
-            Item::History => self.screen = Screen::History,
-            Item::Export | Item::Import => {
-                let input = "~/b-chess-progress.txt".to_string();
-                self.modal = Some(Modal::Path {
-                    import: matches!(item, Item::Import),
-                    input,
-                });
-            }
-            Item::Background => {
-                // Next preset; a custom color moves on to the first preset.
-                let cur = BG.load(Ordering::Relaxed);
-                let i = BACKGROUNDS
-                    .iter()
-                    .position(|&(_, c)| c == cur)
-                    .map_or(0, |i| i + 1);
-                BG.store(BACKGROUNDS[i % BACKGROUNDS.len()].1, Ordering::Relaxed);
-                self.msg = save_settings()
-                    .err()
-                    .map(|e| (format!("Could not save: {e}"), Tc::Red));
-            }
-            Item::Help => self.modal = Some(Modal::Help),
-            Item::Quit => return Ok(true),
-        }
-        Ok(false)
-    }
-
-    pub fn setup_key(&mut self, code: KeyCode, terminal: &mut DefaultTerminal) -> io::Result<()> {
-        let ladder_level = self.ladder_level();
-        let s = &mut self.setup;
-        let delta: i32 = match code {
-            KeyCode::Up | KeyCode::Char('k') => {
-                s.row = s.row.saturating_sub(1);
-                return Ok(());
-            }
-            KeyCode::Down | KeyCode::Char('j') => {
-                s.row = (s.row + 1).min(3);
-                return Ok(());
-            }
-            KeyCode::Esc | KeyCode::Char('q') => {
-                self.screen = Screen::Menu;
-                return Ok(());
-            }
-            KeyCode::Enter => {
-                let mut rng = Rng::new();
-                let me = match s.color {
-                    0 => Color::White,
-                    1 => Color::Black,
-                    _ if rng.below(2) == 0 => Color::White,
-                    _ => Color::Black,
-                };
-                let level = if s.ladder {
-                    ladder_level
-                } else {
-                    self.levels[s.level]
-                };
-                let game = SavedGame {
-                    level,
-                    me,
-                    peeks: 0,
-                    ladder: s.ladder,
-                    uci: Vec::new(),
-                };
-                return self.start_game(terminal, game);
-            }
-            KeyCode::Left | KeyCode::Char('h') => -1,
-            KeyCode::Right | KeyCode::Char('l') => 1,
-            _ => return Ok(()),
-        };
-        match s.row {
-            0 => s.ladder = !s.ladder,
-            1 => s.color = (s.color as i32 + delta).rem_euclid(3) as usize,
-            2 if !s.ladder => {
-                s.level = (s.level as i32 + delta).clamp(0, self.levels.len() as i32 - 1) as usize
-            }
-            _ => {}
-        }
-        Ok(())
     }
 
     pub fn modal_key(&mut self, code: KeyCode) {
@@ -338,12 +242,13 @@ impl App {
     }
 
     pub fn export(&self, path: &Path) -> Result<String, String> {
-        fs::write(path, export_text(&self.history, self.saved.as_ref()))
+        let training = self.training.progress.lines();
+        let saved: Vec<&SavedGame> = self.saved.iter().chain(&self.training.saved_game).collect();
+        fs::write(path, export_text(&self.history, &saved, &training))
             .map_err(|e| format!("Export failed: {e}"))?;
-        let extra = if self.saved.is_some() {
-            " + saved game"
-        } else {
-            ""
+        let extra = match saved.len() {
+            0 => String::new(),
+            n => format!(" + {}", plural(n, "saved game")),
         };
         Ok(format!(
             "Exported {}{extra} to {}",
@@ -354,14 +259,31 @@ impl App {
 
     pub fn import(&mut self, path: &Path) -> Result<String, String> {
         let text = fs::read_to_string(path).map_err(|e| format!("Import failed: {e}"))?;
-        let (history, saved) = import_text(&text).map_err(|e| format!("Import failed: {e}"))?;
+        let imported =
+            import_text(&text, is_event_line).map_err(|e| format!("Import failed: {e}"))?;
+        let (history, saved) = (imported.history, imported.saved);
+        // Files without training progress (older exports) leave the course untouched.
+        let has_training = !imported.training.is_empty();
         write_history(&history)
-            .and_then(|_| write_saved(saved.as_ref()))
+            .and_then(|_| write_saved(Slot::Play, saved.as_ref()))
+            .and_then(|_| write_saved(Slot::Training, imported.training_saved.as_ref()))
+            .and_then(|_| match has_training {
+                true => self.training.progress.replace(&imported.training),
+                false => Ok(()),
+            })
             .map_err(|e| format!("Import failed while saving: {e}"))?;
-        let extra = if saved.is_some() { " + saved game" } else { "" };
+        let mut extra = if saved.is_some() {
+            " + saved game".to_string()
+        } else {
+            String::new()
+        };
+        if has_training {
+            extra += " + training progress";
+        }
         let n = history.len();
         self.history = history;
         self.saved = saved;
+        self.training.saved_game = imported.training_saved;
         self.menu.select(Some(0));
         Ok(format!(
             "Imported {}{extra} from {}",
@@ -389,7 +311,9 @@ impl App {
             );
         })?;
         let weights = self.weights.join(format!("{net}.pb.gz"));
-        let started = Engine::start(&self.lc0, &weights).and_then(|e| Game::resume(e, &saved));
+        let aids = training::aids_for(&saved.mode);
+        let started =
+            Engine::start(&self.lc0, &weights).and_then(|e| Game::resume(e, &saved, aids));
         match started {
             Ok(mut game) => {
                 if saved.uci.is_empty() {
@@ -401,11 +325,18 @@ impl App {
                 self.autosave();
             }
             Err(e) => {
-                if !saved.uci.is_empty() {
-                    self.saved = Some(saved); // keep the saved game if resuming failed
+                let error = format!("Could not start Lc0 ({net}): {e}");
+                // A saved game stays saved; nothing was overwritten.
+                match &saved.mode {
+                    Mode::Training(id) => {
+                        self.screen = Screen::Training;
+                        self.training.show_error(id, error);
+                    }
+                    _ => {
+                        self.screen = Screen::Menu;
+                        self.msg = Some((error, Tc::Red));
+                    }
                 }
-                self.screen = Screen::Menu;
-                self.msg = Some((format!("Could not start Lc0 ({net}): {e}"), Tc::Red));
             }
         }
         Ok(())
@@ -417,88 +348,68 @@ impl App {
             return;
         }
         let sg = g.to_saved();
-        if let Err(e) = write_saved(Some(&sg)) {
+        let slot = Slot::of(&sg.mode);
+        if let Err(e) = write_saved(slot, Some(&sg)) {
             g.msg = Some((format!("Could not save game: {e}"), Tc::Red));
         }
-        self.saved = Some(sg);
+        match slot {
+            Slot::Play => self.saved = Some(sg),
+            Slot::Training => self.training.saved_game = Some(sg),
+        }
     }
 
     pub fn bot_move(&mut self) {
         let Some(g) = self.game.as_mut() else { return };
         if let Err(e) = g.engine_move() {
-            self.msg = Some((format!("Engine error: {e}. Your game is saved."), Tc::Red));
-            self.game = None;
-            self.screen = Screen::Menu;
+            let error = format!("Engine error: {e}. Your game is saved.");
+            match self.game.take().map(|g| g.mode) {
+                Some(Mode::Training(id)) => {
+                    self.screen = Screen::Training;
+                    self.training.show_error(&id, error);
+                }
+                _ => {
+                    self.screen = Screen::Menu;
+                    self.msg = Some((error, Tc::Red));
+                }
+            }
             return;
         }
         self.autosave();
     }
 
-    /// Returns true when the app should close.
-    pub fn game_key(&mut self, k: KeyEvent) -> bool {
-        let Some(g) = self.game.as_mut() else {
-            return false;
-        };
-        if g.result.is_some() {
-            if matches!(k.code, KeyCode::Enter | KeyCode::Esc) {
-                self.finish_game();
-            }
-            return false;
-        }
-        if k.code == KeyCode::Enter {
-            match g.input.trim() {
-                "help" | "?" => {
-                    g.input.clear();
-                    self.modal = Some(Modal::Help);
-                    return false;
-                }
-                "save" | "menu" => {
-                    g.input.clear();
-                    self.leave_game();
-                    return false;
-                }
-                "quit" | "exit" => return true,
-                _ => {}
-            }
-        }
-        g.key(k.code);
-        if matches!(k.code, KeyCode::Enter | KeyCode::Tab) {
-            self.autosave();
-        }
-        false
-    }
-
-    pub fn leave_game(&mut self) {
-        self.game = None;
-        self.screen = Screen::Menu;
-        self.menu.select(Some(0));
-        self.msg = Some(("Game saved. Resume it any time.".into(), Tc::Green));
-    }
-
     pub fn finish_game(&mut self) {
         let Some(g) = self.game.take() else { return };
-        let (result, _) = g.result.unwrap();
+        let (result, _) = g.result.clone().unwrap();
         let rec = Record {
             date: today(),
             level: g.level,
             color: g.me,
             result,
-            next: if g.ladder {
+            next: if g.mode.is_ladder() {
                 step(&self.levels, g.level, result)
             } else {
                 g.level
             },
-            moves: g.san.len().div_ceil(2) as u32,
+            moves: g.my_moves() as u32,
             peeks: g.peeks,
-            ladder: g.ladder,
+            mode: g.mode.clone(),
+            illegal: g.illegal,
         };
+        let slot = Slot::of(&g.mode);
         self.msg = append_history(&rec)
-            .and_then(|_| write_saved(None))
+            .and_then(|_| write_saved(slot, None))
             .err()
             .map(|e| (format!("Could not save history: {e}"), Tc::Red));
         self.history.push(rec);
-        self.saved = None;
+        match slot {
+            Slot::Play => self.saved = None,
+            Slot::Training => self.training.saved_game = None,
+        }
         self.menu.select(Some(0));
         self.screen = Screen::Menu;
+        if let Mode::Training(id) = &g.mode {
+            self.training.game_finished(id, &g);
+            self.screen = Screen::Training;
+        }
     }
 }

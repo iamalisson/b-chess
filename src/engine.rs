@@ -51,12 +51,22 @@ impl Engine {
         }
     }
 
-    /// Best move in UCI notation for the position reached from startpos by `moves`.
-    pub fn best_move(&mut self, moves: &[String], nodes: u32) -> io::Result<String> {
+    /// Best move in UCI notation for the position reached by `moves` from `start`
+    /// (a FEN, or the standard position when `None`).
+    pub fn best_move(
+        &mut self,
+        start: Option<&str>,
+        moves: &[String],
+        nodes: u32,
+    ) -> io::Result<String> {
+        let base = match start {
+            Some(fen) => format!("position fen {fen}"),
+            None => "position startpos".to_string(),
+        };
         if moves.is_empty() {
-            self.send("position startpos")?;
+            self.send(&base)?;
         } else {
-            self.send(&format!("position startpos moves {}", moves.join(" ")))?;
+            self.send(&format!("{base} moves {}", moves.join(" ")))?;
         }
         self.send(&format!("go nodes {nodes}"))?;
         let line = self.wait_for("bestmove")?;

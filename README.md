@@ -41,6 +41,34 @@ climb a ladder one win at a time, and peek only when you really need to.
 - **Saves itself**: every move is saved, so you can close the app and resume later.
 - **Take your progress with you**: export everything to one file and import it on another PC.
 - **History**: date, level, color, result, moves and peeks of every game.
+- **Training**: a full 10-week blindfold course built in (see below).
+
+## Training: the blindfold course
+
+**Training** in the menu (`t`) is a 10-week program, 15–30 minutes a day, that takes you from
+naming square colors to a whole blindfold game. Each phase opens only when you pass the previous
+one's checkpoint, and every answer is checked automatically.
+
+| Phase | What you train |
+|---|---|
+| 0 Diagnostic | five questions to see where you start (retaken at graduation) |
+| 1 The map | square colors (20 in a row, under 2 s each), diagonals, walking the board, a coordinate trainer from both sides |
+| 2 One piece at a time | the squares each piece attacks, shortest knight routes, pins and forks, Fool's and Scholar's mate |
+| 3 Small positions | memorize a position, recite it, then mate in one and mate in two; K+Q and K+R mates against Lc0 |
+| 4 Openings and traps | Ruy López, Italian, Sicilian; Légal, Caro-Kann, Blackburne Shilling and Englund traps, with questions at each stop, then recited from memory |
+| 5 Classic games | Réti–Tartakower, the Opera Game, Lasker–Thomas and the Immortal Game, followed from notation |
+| 6 Training wheels | games with invisible pieces, then a full blindfold game, with no illegal moves |
+| 7 The cup of coffee | daily games and the graduation test ☕ |
+
+Also included:
+- **Today's session**: the phase's daily routine as timed blocks, warm-up first.
+- **The checking habit**: in training games you are asked every 5 moves where the kings are and what is hanging.
+- **`recall`**: rebuild the position when you get lost.
+- **A training log**: filled in automatically.
+- **When stuck**: advice that also appears by itself when your accuracy drops.
+
+The course content lives in [`assets/curriculum.toml`](assets/curriculum.toml). Every move
+sequence, mate and answer in it is checked against the real board by the test suite.
 
 ## Levels
 
@@ -136,7 +164,8 @@ Moves use standard algebraic notation (SAN):
 | | `help` / `?` / F1: all commands |
 | | `save`: back to the menu (game kept) · `quit`: save and exit |
 | | `resign` · Esc Esc: abandon |
-| Menu | ↑↓ Enter · `r` resume · `n` new · `h` history · `e` export · `i` import · `b` background · `q` quit |
+| | `recall`: rebuild the position (training games) |
+| Menu | ↑↓ Enter · `r` resume · `n` new · `t` training · `h` history · `e` export · `i` import · `b` background · `q` quit |
 
 **Background:** `b` in the menu cycles `dark` → `black` → `none` (`none` keeps your terminal's own
 background). For any other color, put `background<TAB>#rrggbb` in `data/settings.tsv`.
@@ -147,6 +176,7 @@ Progress lives in `data/` inside `~/.local/share/b-chess` (or the repo, gitignor
 
 - `data/history.tsv`: one line per finished game
 - `data/saved.tsv`: the game in progress
+- `data/training.tsv`: training progress (passes, log, training games)
 
 **Export progress** writes a single text file (default `~/b-chess-progress.txt`).
 Copy it to the other machine and choose **Import progress** there.
@@ -157,7 +187,8 @@ Copy it to the other machine and choose **Import progress** there.
 |---|---|
 | [Rust](https://www.rust-lang.org) | language |
 | [ratatui](https://ratatui.rs) + [crossterm](https://github.com/crossterm-rs/crossterm) | terminal UI |
-| [shakmaty](https://github.com/niklasf/shakmaty) | chess rules, SAN/UCI parsing, repetition detection |
+| [shakmaty](https://github.com/niklasf/shakmaty) | chess rules, SAN/UCI parsing, repetition detection, mate checks |
+| [serde](https://serde.rs) + [toml](https://github.com/toml-rs/toml) | the embedded training course |
 | [Lc0](https://lczero.org) | neural-network chess engine, spoken to over UCI |
 | [Maia Chess](https://github.com/CSSLab/maia-chess) | human-like networks, 1100–1900 |
 | [Leela T1-256x10](https://lczero.org/play/networks/bestnets/) | strong network for 2200–3000 |
