@@ -28,17 +28,27 @@ const ACCENT: Tc = Tc::Cyan;
 /// Background of the whole app.
 const PANEL: Tc = Tc::Rgb(36, 40, 54);
 
-const HELP: &[(&str, &str)] = &[
+// Help is two columns side by side when the terminal is wide enough, stacked otherwise.
+const HELP_LEFT: &[(&str, &str)] = &[
+    ("#", "How to move"),
+    ("e4  d5", "pawn: just the square it goes to"),
+    ("Nf3  Bb5  Qh5", "piece letter + square (K Q R B N)"),
+    ("exd5  Nxe5", "x captures; a pawn names its file"),
+    ("Nbd7  R1e2", "two can go there? add file or rank"),
+    ("O-O  O-O-O", "castle short / long (0-0 works)"),
+    ("e8=Q", "promote (=Q =R =B =N)"),
+    ("e2e4  g1f3", "or: from square + to square"),
+    ("", ""),
     ("#", "In a game"),
-    ("Nf3 exd5 O-O e8=Q", "play a move (SAN)"),
-    ("g1f3", "play a move (UCI)"),
-    ("board  b  Tab", "show / hide the board (counted as a peek)"),
+    ("board  b  Tab", "show / hide the board (a peek)"),
     ("help  ?  F1", "show this help"),
     ("save  menu", "back to the menu, game is kept"),
     ("quit", "save the game and close the app"),
     ("resign", "give up (counts as a loss)"),
     ("Esc Esc", "abandon (counts as a loss)"),
-    ("", ""),
+];
+
+const HELP_RIGHT: &[(&str, &str)] = &[
     ("#", "In the menu"),
     ("↑↓  ←→  Enter", "choose"),
     ("r  n  h", "resume, new game, history"),
@@ -46,14 +56,14 @@ const HELP: &[(&str, &str)] = &[
     ("?  q", "help, quit"),
     ("", ""),
     ("#", "Modes"),
-    ("Ladder", "start at the bottom; win = level up, loss = down"),
-    ("Free play", "pick any level; does not move your ladder"),
+    ("Ladder", "win = level up, loss = down"),
+    ("Free play", "any level; ladder unchanged"),
     ("", ""),
     ("#", "Progress"),
-    ("", "The game saves itself after every move:"),
-    ("", "close the app any time and resume later."),
-    ("", "Export writes one file with all your games;"),
-    ("", "copy it to the other PC and Import it there."),
+    ("", "Saved after every move: close the"),
+    ("", "app any time and resume later."),
+    ("", "Export writes one file with all"),
+    ("", "your games; Import it on another PC."),
 ];
 
 // ---------- levels ----------
@@ -477,7 +487,7 @@ impl Game {
                     self.thinking = self.result.is_none();
                 }
                 None => {
-                    self.msg = Some((format!("Illegal or unknown move: {s}  (type help)"), Tc::Red))
+                    self.msg = Some((format!("Illegal or unknown move: {s}  (type help to see how to move)"), Tc::Red))
                 }
             },
         }
@@ -1204,23 +1214,45 @@ fn popup<'a>(f: &mut Frame, w: u16, h: u16, text: impl Into<Text<'a>>, color: Tc
     f.render_widget(Paragraph::new(text), center(inner, inner.width, th));
 }
 
-fn draw_help(f: &mut Frame) {
-    let lines: Vec<Line> = HELP
+fn help_lines(items: &[(&'static str, &'static str)]) -> Vec<Line<'static>> {
+    items
         .iter()
         .map(|&(keys, what)| match keys {
             "#" => Line::from(what).bold().fg(ACCENT),
             "" => Line::from(format!("  {what}")),
-            _ => Line::from(vec![Span::raw(format!("  {keys:<20}")).bold(), Span::raw(what).dim()]),
+            _ => Line::from(vec![Span::raw(format!("  {keys:<16}")).bold(), Span::raw(what).dim()]),
         })
-        .collect();
-    let area = center(f.area(), 72, lines.len() as u16 + 4);
+        .collect()
+}
+
+fn draw_help(f: &mut Frame) {
+    const COL: u16 = 56;
+    let (left, right) = (help_lines(HELP_LEFT), help_lines(HELP_RIGHT));
+    let wide = f.area().width >= 2 * COL + 8;
+    let (w, h) = if wide {
+        (2 * COL + 6, left.len().max(right.len()) as u16 + 4)
+    } else {
+        (COL + 4, (left.len() + right.len() + 1) as u16 + 4)
+    };
+    let area = center(f.area(), w, h.min(f.area().height));
     solid(f, area);
     let block = rounded(" Help ")
         .border_style(Style::new().fg(ACCENT))
         .title_bottom(Line::from(" any key to close ").dim().centered());
     let inner = block.inner(area).inner(Margin::new(1, 1));
     f.render_widget(block, area);
-    f.render_widget(Paragraph::new(lines), inner);
+    if wide {
+        let [l, r] = Layout::horizontal([Constraint::Length(COL), Constraint::Length(COL)])
+            .spacing(2)
+            .areas(inner);
+        f.render_widget(Paragraph::new(left), l);
+        f.render_widget(Paragraph::new(right), r);
+    } else {
+        let mut all = left;
+        all.push(Line::from(""));
+        all.extend(right);
+        f.render_widget(Paragraph::new(all), inner);
+    }
 }
 
 fn draw_path(f: &mut Frame, import: bool, input: &str) {

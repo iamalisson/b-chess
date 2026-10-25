@@ -16,6 +16,20 @@ climb a ladder one win at a time, and peek only when you really need to.
 
 ---
 
+## Screenshots
+
+**Blindfold**: you see only the moves.
+
+![Blindfold game](assets/image1.png)
+
+**Peeking**: `board` shows a gnuchess-style board; the last move is highlighted.
+
+![Board peek](assets/image2.png)
+
+**Help**: every command, one keypress away.
+
+![Help screen](assets/image3.png)
+
 ## Features
 
 - **Blindfold by default**: you see the moves, not the board. Type `board` (or press Tab) to peek; peeks are counted.
@@ -70,6 +84,18 @@ cargo run --release
 > A GPU or oneDNN/BLAS build of Lc0 makes this much faster.
 
 ## How to play
+
+Moves use standard algebraic notation (SAN):
+
+| Type | Means |
+|---|---|
+| `e4` `d5` | pawn move: just the square it goes to |
+| `Nf3` `Bb5` `Qh5` | piece letter + square: **K**ing, **Q**ueen, **R**ook, **B**ishop, k**N**ight |
+| `exd5` `Nxe5` | `x` is a capture; a capturing pawn names its file |
+| `Nbd7` `R1e2` | two pieces can reach the square? add the file or rank they come from |
+| `O-O` `O-O-O` | castle short / long (`0-0` works too) |
+| `e8=Q` | promote a pawn |
+| `e2e4` | or just type from-square + to-square |
 
 | Where | Keys / commands |
 |---|---|
