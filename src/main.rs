@@ -902,6 +902,35 @@ impl App {
             Some(Modal::Path { import, input }) => draw_path(f, *import, input),
             None => {}
         }
+        self.ink(f);
+    }
+
+    /// After the widgets are drawn: blank cells show the image again, and text without its
+    /// own colors gets the terminal's text color on a dark backing so it stays readable.
+    fn ink(&self, f: &mut Frame) {
+        let Some((w, h, cells)) = &self.bg_cache else { return };
+        let area = f.area();
+        if (area.width, area.height) != (*w, *h) {
+            return;
+        }
+        let buf = f.buffer_mut();
+        for y in 0..*h {
+            for x in 0..*w {
+                let (top, bottom) = cells[(y * w + x) as usize];
+                let cell = &mut buf[(area.x + x, area.y + y)];
+                let untouched_bg = cell.bg == bottom || cell.bg == Tc::Reset;
+                if cell.symbol() == " " && untouched_bg {
+                    cell.set_char('▀').set_fg(top).set_bg(bottom);
+                } else if cell.symbol() != "▀" {
+                    if cell.fg == top {
+                        cell.fg = Tc::Reset;
+                    }
+                    if untouched_bg {
+                        cell.bg = PANEL;
+                    }
+                }
+            }
+        }
     }
 
     /// The background image as half blocks: each cell shows two pixels (fg on top, bg below).
@@ -1204,10 +1233,9 @@ impl App {
 
 // ---------- widgets ----------
 
-/// Opaque panel over the background image.
+/// Empties `area`; `App::ink` paints the background image back into the blank cells.
 fn solid(f: &mut Frame, area: Rect) {
     f.render_widget(Clear, area);
-    f.render_widget(Block::new().style(Style::new().bg(PANEL)), area);
 }
 
 fn rounded(title: &str) -> Block<'_> {
